@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Receipt photos go to the cache so Android can clear them; they are only needed until OCR finishes. -->
+<paths>
+    <cache-path name="receipts" path="receipts/" />
+</paths>
