@@ -1,5 +1,22 @@
 # Buyless
 
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/setup.png" width="190" alt="Setup"><br><sub>Setup</sub></td>
+    <td align="center"><img src="docs/screenshots/home.png" width="190" alt="Home"><br><sub>Home</sub></td>
+    <td align="center"><img src="docs/screenshots/activity.png" width="190" alt="Activity"><br><sub>Activity</sub></td>
+    <td align="center"><img src="docs/screenshots/split-board.png" width="190" alt="Split: who had what"><br><sub>Split: who had what</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/split-totals.png" width="190" alt="Split: totals"><br><sub>Split: totals</sub></td>
+    <td align="center"><img src="docs/screenshots/show-qr.png" width="190" alt="Show QR"><br><sub>Show QR</sub></td>
+    <td align="center"><img src="docs/screenshots/add-people.png" width="190" alt="Add people"><br><sub>Add people</sub></td>
+    <td align="center"><img src="docs/screenshots/whatsapp.png" width="190" alt="Sent on WhatsApp"><br><sub>Sent on WhatsApp</sub></td>
+  </tr>
+</table>
+
+<sub>Screens from the design mockups.</sub>
+
 An Android app that records your spending automatically. It reads payment notifications from bank and
 e-wallet apps (MAE, Bank Islam, Touch 'n Go, plus any app you add), works out the amount and direction,
 and keeps everything on your phone.
