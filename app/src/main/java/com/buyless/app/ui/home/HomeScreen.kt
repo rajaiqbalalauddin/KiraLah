@@ -1,5 +1,6 @@
 package com.buyless.app.ui.home
 
+import com.buyless.app.ui.components.KiraLahWordmark
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -38,6 +39,22 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.input.KeyboardType
+import com.buyless.app.ui.components.SwipeToDelete
+import com.buyless.app.util.Money
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,6 +87,9 @@ fun HomeScreen(
 ) {
     val vm = appViewModel { c, _ -> HomeViewModel(c.transactions, c.apps, c.selectedMonth) }
     val state by vm.state.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    var editingBalance by rememberSaveable { mutableStateOf<String?>(null) }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -78,7 +98,7 @@ fun HomeScreen(
         ) {
             item(key = "header", contentType = "header") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Buyless", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                    KiraLahWordmark(style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
                     MonthSwitcher(state.monthName, state.canGoNext, vm::previousMonth, vm::nextMonth)
                     Spacer(Modifier.width(4.dp))
                     IconButton(onClick = onOpenReview) {
@@ -94,10 +114,15 @@ fun HomeScreen(
             item(key = "apps", contentType = "apps") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SectionHeader("Your apps") {
-                        Text("Own transfers not counted", style = MaterialTheme.typography.bodySmall, color = BColors.Muted)
+                        val total = state.totalBalanceText
+                        if (total != null) {
+                            Text("Total $total", style = MaterialTheme.typography.titleSmall, color = BColors.Violet)
+                        } else {
+                            Text("Tap an app to set its balance", style = MaterialTheme.typography.bodySmall, color = BColors.Muted)
+                        }
                     }
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(state.apps, key = { it.packageName }) { AppTile(it) }
+                        items(state.apps, key = { it.packageName }) { tile -> AppTile(tile, onClick = { editingBalance = tile.packageName }) }
                         item(key = "add") { AddAppTile(onAddApp) }
                     }
                 }
@@ -124,9 +149,23 @@ fun HomeScreen(
             }
 
             items(state.recent, key = { it.id }, contentType = { "txn" }) { item ->
-                TransactionRow(item, onClick = { onOpenTransaction(item.id) })
+                SwipeToDelete(
+                    surface = BColors.Lavender,
+                    onDelete = {
+                        vm.delete(item.id) { removed ->
+                            scope.launch {
+                                val result = snackbar.showSnackbar("Deleted ${item.title}", actionLabel = "Undo", duration = SnackbarDuration.Short)
+                                if (result == SnackbarResult.ActionPerformed) vm.restore(removed)
+                            }
+                        }
+                    },
+                ) {
+                    TransactionRow(item, onClick = { onOpenTransaction(item.id) })
+                }
             }
         }
+
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 88.dp, bottom = 16.dp))
 
         FloatingActionButton(
             onClick = onAddManual,
@@ -136,6 +175,19 @@ fun HomeScreen(
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
         ) {
             Icon(Icons.Rounded.Add, contentDescription = "Add a transaction by hand")
+        }
+    }
+
+    editingBalance?.let { pkg ->
+        state.apps.firstOrNull { it.packageName == pkg }?.let { tile ->
+            BalanceDialog(
+                tile = tile,
+                onDismiss = { editingBalance = null },
+                onSave = { input ->
+                    vm.setBalance(pkg, input)
+                    editingBalance = null
+                },
+            )
         }
     }
 }
@@ -187,24 +239,67 @@ private fun HeroStat(icon: ImageVector, iconTint: Color, label: String, value: S
     }
 }
 
+/** App tile: balance first (what you have), then this month's spending. Tap to set the balance. */
 @Composable
-private fun AppTile(tile: AppTileUi) {
+private fun AppTile(tile: AppTileUi, onClick: () -> Unit) {
     Column(
         Modifier
-            .width(128.dp)
+            .width(136.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(BColors.White)
             .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
+            .clickable(onClickLabel = "Set ${tile.label} balance", onClick = onClick)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         AppBadge(tile.packageName, tile.kind, size = 36.dp)
         Column {
             Text(tile.label, style = MaterialTheme.typography.titleSmall, color = BColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(tile.spentText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text(tile.countText, style = MaterialTheme.typography.bodySmall, color = BColors.Muted)
+            val balance = tile.balanceText
+            if (balance != null) {
+                Text(balance, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+            } else {
+                Text("Set balance", style = MaterialTheme.typography.titleSmall, color = BColors.Violet)
+            }
+            Text("Spent ${tile.spentText}", style = MaterialTheme.typography.bodySmall, color = BColors.Muted, maxLines = 1)
         }
     }
+}
+
+/** Type what the bank app shows now. Nothing is transferred and no transaction is added. */
+@Composable
+private fun BalanceDialog(tile: AppTileUi, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var text by rememberSaveable { mutableStateOf(tile.balanceSen?.let { Money.toInput(kotlin.math.abs(it)) } ?: "") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { AppBadge(tile.packageName, tile.kind, size = 40.dp) },
+        title = { Text("${tile.label} balance") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Enter what ${tile.label} shows right now. KiraLah keeps it up to date from your alerts. No money moves and nothing is added to your spending.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = BColors.Muted,
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { v -> text = v.filter { it.isDigit() || it == '.' }.take(12) },
+                    prefix = { Text("RM ") },
+                    placeholder = { Text("0.00") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(14.dp),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(text) }) { Text("Save") } },
+        dismissButton = {
+            Row {
+                if (tile.balanceSen != null) TextButton(onClick = { onSave("") }) { Text("Clear", color = BColors.Danger) }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
 }
 
 @Composable

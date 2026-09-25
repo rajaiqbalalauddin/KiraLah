@@ -23,7 +23,13 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_SAMPLES, true)
         set(value) = prefs.edit().putBoolean(KEY_SAMPLES, value).apply()
 
+    /** Set once QRs saved before auto-cropping have been cropped, so it only ever runs once. */
+    var qrsCropped: Boolean
+        get() = prefs.getBoolean(KEY_QRS_CROPPED, false)
+        set(value) = prefs.edit().putBoolean(KEY_QRS_CROPPED, value).apply()
+
     private companion object {
+        const val KEY_QRS_CROPPED = "qrs_cropped"
         const val KEY_SAMPLES = "collect_samples"
         const val KEY_ONBOARDING = "onboarding_done"
         const val KEY_LAST_QR = "last_qr_id"

@@ -2,12 +2,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Only used by the Split tab to send a receipt photo to Gemini. Nothing else goes online. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Lets the app ask to be excluded from battery optimisation so the listener is not killed. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- Android 11+ hides other apps by default. Asking only for launcher apps is enough to find
          banking and e-wallet apps, without the broad QUERY_ALL_PACKAGES permission. -->
     <queries>
+        <!-- Lets Split check whether WhatsApp or WhatsApp Business is installed before opening it. -->
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />

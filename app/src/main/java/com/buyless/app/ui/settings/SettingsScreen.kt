@@ -109,7 +109,7 @@ fun SettingsScreen(onOpenApps: () -> Unit, onOpenSamples: () -> Unit) {
                 Column(Modifier.weight(1f)) {
                     Text("Notification samples", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "See what MAE, TNG and others send, and share alerts Buyless did not recognise",
+                        "See what MAE, TNG and others send, and share alerts KiraLah did not recognise",
                         style = MaterialTheme.typography.bodySmall,
                         color = BColors.Muted,
                     )
@@ -131,7 +131,7 @@ fun SettingsScreen(onOpenApps: () -> Unit, onOpenSamples: () -> Unit) {
             InfoCard(
                 Icons.Rounded.VerifiedUser, BColors.VioletSoft, BColors.Violet, BColors.Ink,
                 "Your data stays here",
-                "Everything is stored only on this phone. Buyless has no account and no server. " +
+                "Everything is stored only on this phone. KiraLah has no account and no server. " +
                     "One-time codes (OTP / TAC) are never saved.",
             )
         }

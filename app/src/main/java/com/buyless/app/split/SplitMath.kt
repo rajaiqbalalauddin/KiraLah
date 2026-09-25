@@ -35,6 +35,19 @@ object SplitMath {
         return people.withIndex().associate { (i, id) -> id to Share(itemTotals.getValue(id), extras[i]) }
     }
 
+    /**
+     * One person's part of one item, using the same rule as [compute] (leftover sen go to the first
+     * owners in [people] order), so the WhatsApp breakdown matches the Totals screen to the sen.
+     */
+    fun shareOf(priceSen: Long, owners: List<Long>, people: List<Long>, person: Long): Long {
+        val order = people.withIndex().associate { it.value to it.index }
+        val sorted = owners.filter { it in order }.sortedBy { order[it] }
+        val index = sorted.indexOf(person)
+        if (index < 0) return 0L
+        val remainder = (priceSen % sorted.size).toInt()
+        return priceSen / sorted.size + if (index < remainder) 1 else 0
+    }
+
     /** Splits [amount] by [weights]. Falls back to equal parts when nobody has any weight yet. */
     fun distribute(amount: Long, weights: List<Long>): List<Long> {
         if (weights.isEmpty()) return emptyList()

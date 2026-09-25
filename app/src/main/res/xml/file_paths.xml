@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Receipt photos go to the cache so Android can clear them; they are only needed until OCR finishes. -->
+<!-- Receipt photos go to the cache so Android can clear them; they are only needed until OCR finishes.
+     Pay cards for WhatsApp go to cache/share and are overwritten per person. -->
 <paths>
     <cache-path name="receipts" path="receipts/" />
+    <cache-path name="share" path="share/" />
 </paths>

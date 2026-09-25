@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Home
@@ -31,6 +31,9 @@ import com.buyless.app.ui.apps.AppsScreen
 import com.buyless.app.ui.editor.EditorScreen
 import com.buyless.app.ui.editor.EditorViewModel
 import com.buyless.app.ui.home.HomeScreen
+import com.buyless.app.ui.recap.RecapScreen
+import com.buyless.app.ui.recap.RecapStoryScreen
+import com.buyless.app.ui.recap.RecapStoryViewModel
 import com.buyless.app.ui.settings.SamplesScreen
 import com.buyless.app.ui.settings.SettingsScreen
 import com.buyless.app.ui.split.SplitScreen
@@ -44,6 +47,11 @@ object Routes {
     const val HOME = "home"
     const val ACTIVITY = "activity"
     const val SPLIT = "split"
+    const val RECAP = "recap"
+    const val RECAP_STORY = "recap/story/{${RecapStoryViewModel.ARG_PERIOD}}"
+
+    /** period is "2026-09" for a month or "2026" for a whole year. */
+    fun recapStory(period: String) = "recap/story/$period"
     const val APPS = "apps"
     const val SETTINGS = "settings"
     const val SAMPLES = "settings/samples"
@@ -61,7 +69,7 @@ private val tabs = listOf(
     Tab(Routes.HOME, "Home", Icons.Rounded.Home),
     Tab(Routes.ACTIVITY, "Activity", Icons.Rounded.BarChart),
     Tab(Routes.SPLIT, "Split", Icons.Rounded.Groups),
-    Tab(Routes.APPS, "Apps", Icons.Rounded.Apps),
+    Tab(Routes.RECAP, "Recap", Icons.Rounded.AutoAwesome),
     Tab(Routes.SETTINGS, "Settings", Icons.Rounded.Settings),
 )
 private val tabRoutes = tabs.map { it.route }.toSet()
@@ -99,14 +107,20 @@ fun BuylessNavHost(startDestination: String) {
                     onOpenActivity = { nav.switchTab(Routes.ACTIVITY) },
                     onOpenTransaction = { nav.navigate(Routes.edit(it)) },
                     onAddManual = { nav.navigate(Routes.manual()) },
-                    onAddApp = { nav.switchTab(Routes.APPS) },
+                    onAddApp = { nav.navigate(Routes.APPS) },
                 )
             }
             composable(Routes.ACTIVITY) { ActivityScreen(onOpenTransaction = { nav.navigate(Routes.edit(it)) }) }
+            composable(Routes.RECAP) { RecapScreen(onOpen = { nav.navigate(Routes.recapStory(it)) }) }
+            composable(
+                Routes.RECAP_STORY,
+                arguments = listOf(navArgument(RecapStoryViewModel.ARG_PERIOD) { type = NavType.StringType }),
+            ) { RecapStoryScreen(onClose = { nav.popBackStack() }) }
             composable(Routes.SPLIT) { SplitScreen() }
-            composable(Routes.APPS) { AppsScreen() }
+            // Apps is no longer a tab (five tabs is the comfortable maximum); it opens from Home and Settings.
+            composable(Routes.APPS) { AppsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.SETTINGS) {
-                SettingsScreen(onOpenApps = { nav.switchTab(Routes.APPS) }, onOpenSamples = { nav.navigate(Routes.SAMPLES) })
+                SettingsScreen(onOpenApps = { nav.navigate(Routes.APPS) }, onOpenSamples = { nav.navigate(Routes.SAMPLES) })
             }
             composable(Routes.SAMPLES) { SamplesScreen(onBack = { nav.popBackStack() }) }
             composable(

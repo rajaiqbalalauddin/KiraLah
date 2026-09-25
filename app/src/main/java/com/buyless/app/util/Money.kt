@@ -92,4 +92,7 @@ object Dates {
         if (month.year == YearMonth.now(zone).year) month.format(monthName) else month.format(monthYear)
 
     fun fullDate(millis: Long): String = Instant.ofEpochMilli(millis).atZone(zone).format(fullDate)
+
+    /** "7 Sep". Used in messages that may be read days later, where "Today" would be wrong. */
+    fun shortDate(millis: Long): String = Instant.ofEpochMilli(millis).atZone(zone).format(dayMonth)
 }

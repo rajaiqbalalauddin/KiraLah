@@ -8,6 +8,7 @@ import android.util.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
+import com.buyless.app.data.db.AppBalance
 import com.buyless.app.data.db.WatchedAppDao
 import com.buyless.app.data.db.WatchedAppEntity
 import com.buyless.app.data.model.AppKind
@@ -89,6 +90,12 @@ class AppsRepository(
     }
 
     suspend fun unwatch(packageName: String) = dao.delete(packageName)
+
+    fun observeBalances(): Flow<List<AppBalance>> = dao.observeBalances().distinctUntilChanged()
+
+    /** Records what the app shows right now as the new starting point. Null clears it. */
+    suspend fun setBalance(packageName: String, balanceSen: Long?) =
+        dao.setBalance(packageName, balanceSen, balanceSen?.let { System.currentTimeMillis() })
 
     /** First run only: pre-select MAE, Bank Islam and TNG if they are installed. */
     suspend fun seedDefaultsIfEmpty() {

@@ -39,11 +39,9 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.PanTool
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -52,12 +50,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import com.buyless.app.share.PhoneNumbers
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -218,25 +218,24 @@ internal fun SplitBoard(vm: SplitViewModel) {
     }
 
     if (addingPerson) {
-        NameDialog(
-            title = "Who else is eating?",
-            initial = "",
-            confirm = "Add",
-            onDismiss = { addingPerson = false },
-            onConfirm = { vm.addPerson(it); addingPerson = false },
-        )
+        PeopleSheet(vm, onDismiss = { addingPerson = false })
     }
     editingPerson?.let { id ->
         val person = vm.people.firstOrNull { it.id == id }
         if (person != null) {
-            NameDialog(
-                title = "Edit ${person.name}",
-                initial = person.name,
-                confirm = "Save",
-                onDismiss = { editingPerson = null },
-                onConfirm = { vm.renamePerson(id, it); editingPerson = null },
-                onRemove = if (id != SplitViewModel.ME_ID) ({ vm.removePerson(id); editingPerson = null }) else null,
-            )
+            key(id) {
+                PersonFormDialog(
+                    title = if (id == SplitViewModel.ME_ID) "Your name" else "Edit ${person.name}",
+                    initialName = person.name,
+                    initialPhone = PhoneNumbers.pretty(person.phone) ?: "",
+                    confirm = "Save",
+                    showPhone = id != SplitViewModel.ME_ID,
+                    onDismiss = { editingPerson = null },
+                    onConfirm = { name, phone -> vm.editPerson(id, name, phone); editingPerson = null },
+                    removeLabel = "Remove from bill",
+                    onRemove = if (id != SplitViewModel.ME_ID) ({ vm.removePerson(id); editingPerson = null }) else null,
+                )
+            }
         }
     }
 }
@@ -278,6 +277,7 @@ private fun ItemBlock(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(item.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        item.note?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = BColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         Text(Money.format(item.priceSen), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
         if (owners.isNotEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -472,35 +472,3 @@ internal fun Avatar(person: Person, size: Dp, modifier: Modifier = Modifier, rin
     }
 }
 
-@Composable
-private fun NameDialog(
-    title: String,
-    initial: String,
-    confirm: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-    onRemove: (() -> Unit)? = null,
-) {
-    var name by rememberSaveable { mutableStateOf(initial) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it.take(20) },
-                placeholder = { Text("Name") },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-            )
-        },
-        confirmButton = { TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) { Text(confirm) } },
-        dismissButton = {
-            Row {
-                if (onRemove != null) TextButton(onClick = onRemove) { Text("Remove", color = BColors.Danger) }
-                Spacer(Modifier.width(4.dp))
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-            }
-        },
-    )
-}

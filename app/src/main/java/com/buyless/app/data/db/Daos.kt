@@ -50,6 +50,22 @@ interface TransactionDao {
     @Query("DELETE FROM transactions WHERE id = :id")
     suspend fun delete(id: Long)
 
+    /** Re-inserts a row exactly as it was (same id), used by Undo after a swipe delete. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun restore(entity: TransactionEntity)
+
+    /** Every counted transaction in a window, oldest first. Feeds the Recap stories. */
+    @Query("SELECT * FROM transactions WHERE isInternal = 0 AND timestamp >= :from AND timestamp < :to ORDER BY timestamp")
+    suspend fun countedInRange(from: Long, to: Long): List<TransactionEntity>
+
+    /** Month-by-month spending for the Recap archive, grouped by local calendar month in SQL. */
+    @Query(
+        "SELECT strftime('%Y-%m', timestamp / 1000, 'unixepoch', 'localtime') AS ym, " +
+            "COALESCE(SUM(CASE WHEN direction = 'OUT' THEN amountSen ELSE 0 END), 0) AS outSen, COUNT(*) AS count " +
+            "FROM transactions WHERE isInternal = 0 GROUP BY ym ORDER BY ym DESC",
+    )
+    fun observeMonths(): Flow<List<MonthSummary>>
+
     /**
      * Finds the other half of a transfer between the user's own apps: same amount, opposite
      * direction, a different app, close in time. Closest in time wins.
@@ -93,6 +109,21 @@ interface WatchedAppDao {
 
     @Query("UPDATE watched_apps SET confirmedCount = confirmedCount + 1 WHERE packageName = :packageName")
     suspend fun incrementConfirmed(packageName: String)
+
+    /** Sets the starting point for an app's balance. No transaction is created. */
+    @Query("UPDATE watched_apps SET balanceSen = :balanceSen, balanceSetAt = :at WHERE packageName = :packageName")
+    suspend fun setBalance(packageName: String, balanceSen: Long?, at: Long?)
+
+    /**
+     * Live balance per app. Transfers between your own apps count here (unlike in spending totals),
+     * because the money really did leave one app and land in another.
+     */
+    @Query(
+        "SELECT w.packageName AS packageName, w.balanceSen + COALESCE(SUM(CASE WHEN t.direction = 'IN' THEN t.amountSen ELSE -t.amountSen END), 0) AS balanceSen " +
+            "FROM watched_apps w LEFT JOIN transactions t ON t.sourcePackage = w.packageName AND t.timestamp >= w.balanceSetAt " +
+            "WHERE w.balanceSen IS NOT NULL GROUP BY w.packageName",
+    )
+    fun observeBalances(): Flow<List<AppBalance>>
 }
 
 @Dao
@@ -127,6 +158,9 @@ interface PaymentQrDao {
     @Query("SELECT * FROM payment_qr ORDER BY addedAt")
     fun observeAll(): Flow<List<PaymentQrEntity>>
 
+    @Query("SELECT * FROM payment_qr")
+    suspend fun all(): List<PaymentQrEntity>
+
     @Insert
     suspend fun insert(entity: PaymentQrEntity): Long
 
@@ -148,4 +182,61 @@ interface RawNotificationDao {
 
     @Query("DELETE FROM raw_notifications")
     suspend fun clear()
+}
+
+@Dao
+interface SplitBillDao {
+    @Query("SELECT * FROM split_bills ORDER BY updatedAt DESC")
+    fun observeAll(): Flow<List<SplitBillEntity>>
+
+    @Query("SELECT * FROM split_bills WHERE id = :id")
+    suspend fun get(id: Long): SplitBillEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: SplitBillEntity): Long
+
+    @Query("DELETE FROM split_bills WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("SELECT receiptPath FROM split_bills WHERE receiptPath IS NOT NULL")
+    suspend fun allReceiptPaths(): List<String>
+
+    /** Oldest first, used once to fill the friends list from splits made before friends existed. */
+    @Query("SELECT stateJson FROM split_bills ORDER BY createdAt")
+    suspend fun allStates(): List<String>
+}
+
+@Dao
+interface FriendDao {
+    /** Favourites first, then the people you split with most, then the most recent. */
+    @Query("SELECT * FROM friends ORDER BY favourite DESC, timesSplit DESC, lastSplitAt DESC, name COLLATE NOCASE")
+    fun observeRanked(): Flow<List<FriendEntity>>
+
+    @Query("SELECT * FROM friends WHERE nameKey = :key LIMIT 1")
+    suspend fun findByKey(key: String): FriendEntity?
+
+    @Query("SELECT * FROM friends WHERE id = :id")
+    suspend fun get(id: Long): FriendEntity?
+
+    @Query("SELECT COUNT(*) FROM friends")
+    suspend fun count(): Int
+
+    /** IGNORE so a race between two adds of the same name keeps the first row instead of crashing. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(friend: FriendEntity): Long
+
+    @Update
+    suspend fun update(friend: FriendEntity)
+
+    @Query("UPDATE friends SET favourite = :favourite WHERE id = :id")
+    suspend fun setFavourite(id: Long, favourite: Boolean)
+
+    @Query("UPDATE friends SET phone = :phone WHERE id = :id")
+    suspend fun setPhone(id: Long, phone: String?)
+
+    @Query("UPDATE friends SET timesSplit = timesSplit + 1, lastSplitAt = :now WHERE id IN (:ids)")
+    suspend fun recordSplit(ids: List<Long>, now: Long)
+
+    @Query("DELETE FROM friends WHERE id = :id")
+    suspend fun delete(id: Long)
 }

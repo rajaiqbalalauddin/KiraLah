@@ -14,6 +14,18 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.buyless.app.ui.components.Pill
+import com.buyless.app.ui.components.SwipeToDelete
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -96,9 +108,11 @@ internal val BlockFills = listOf(
 /** Entry point of the Split tab. Each step slides in from the side, so the flow feels like one journey. */
 @Composable
 fun SplitScreen() {
-    val vm = appViewModel { c, _ -> SplitViewModel(c.receiptScanner, c.qrs, c.prefs) }
-    BackHandler(enabled = vm.step != SplitStep.SCAN || vm.showingPayFor != null) { vm.back() }
+    val vm = appViewModel { c, _ -> SplitViewModel(c.receiptScanner, c.qrs, c.prefs, c.splitHistory, c.friends, c.payCards) }
+    BackHandler(enabled = vm.step != SplitStep.SCAN || vm.showingPayFor != null || vm.showingReceipt) { vm.back() }
+    val snackbar = remember { SnackbarHostState() }
 
+    Box(Modifier.fillMaxSize()) {
     AnimatedContent(
         targetState = vm.step,
         transitionSpec = {
@@ -109,10 +123,28 @@ fun SplitScreen() {
         label = "splitStep",
     ) { step ->
         when (step) {
-            SplitStep.SCAN -> ScanStep(vm)
+            SplitStep.SCAN -> ScanStep(vm, snackbar)
             SplitStep.ITEMS -> ItemsStep(vm)
             SplitStep.BOARD -> SplitBoard(vm)
             SplitStep.SUMMARY -> SplitSummary(vm)
+        }
+    }
+
+    // The receipt photo opens over whichever step asked for it.
+    val path = vm.receiptPath
+    if (vm.showingReceipt && path != null) {
+        ReceiptViewer(path, vm.merchant ?: "Receipt", onClose = { vm.showReceipt(false) })
+    }
+    SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp))
+    }
+}
+
+/** Receipt icon for step headers. Only shown when a photo was kept for this bill. */
+@Composable
+internal fun ReceiptButton(vm: SplitViewModel) {
+    if (vm.receiptPath != null) {
+        IconButton(onClick = { vm.showReceipt(true) }) {
+            Icon(Icons.Rounded.ReceiptLong, contentDescription = "View receipt photo")
         }
     }
 }
@@ -120,7 +152,9 @@ fun SplitScreen() {
 // ---------------- Step 1: scan ----------------
 
 @Composable
-private fun ScanStep(vm: SplitViewModel) {
+private fun ScanStep(vm: SplitViewModel, snackbar: SnackbarHostState) {
+    val history by vm.historyCards.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var pendingPhoto by rememberSaveable { mutableStateOf<Uri?>(null) }
     var cameraMissing by rememberSaveable { mutableStateOf(false) }
@@ -131,6 +165,12 @@ private fun ScanStep(vm: SplitViewModel) {
     }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) vm.onPhoto(uri)
+    }
+
+    // While Gemini reads, the whole tab becomes the scanning animation.
+    if (vm.scanning) {
+        ScanningView(stage = vm.scanStage, photo = vm.scanPhoto, onCancel = vm::cancelScan)
+        return
     }
 
     LazyColumn(
@@ -172,19 +212,6 @@ private fun ScanStep(vm: SplitViewModel) {
                 StepChip(Icons.Rounded.ReceiptLong, "Scan", BColors.CoralSoft, BColors.CoralInk, Modifier.weight(1f))
                 StepChip(Icons.Rounded.Groups, "Drag", BColors.BlueSoft, BColors.BlueInk, Modifier.weight(1f))
                 StepChip(Icons.Rounded.QrCode2, "Get paid", BColors.GreenSoft, BColors.Green, Modifier.weight(1f))
-            }
-        }
-
-        if (vm.scanning) {
-            item {
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(BColors.White).padding(18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    CircularProgressIndicator(color = BColors.Violet, modifier = Modifier.size(28.dp))
-                    Text("Reading your receipt...", style = MaterialTheme.typography.titleMedium)
-                }
             }
         }
 
@@ -235,10 +262,60 @@ private fun ScanStep(vm: SplitViewModel) {
         item {
             Text(
                 "Tip: lay the receipt flat in good light and fit the whole thing in the photo. " +
-                    "The photo is read on your phone and never uploaded.",
+                    "The photo is sent to Gemini to read the items, and a copy is kept on this phone with the split.",
                 style = MaterialTheme.typography.bodySmall,
                 color = BColors.Muted,
             )
+        }
+
+        if (history.isNotEmpty()) {
+            item(key = "historyHeader") {
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Past splits", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    Text("Swipe left to delete", style = MaterialTheme.typography.bodySmall, color = BColors.Muted)
+                }
+            }
+            items(history, key = { "h" + it.id }) { card ->
+                SwipeToDelete(
+                    surface = BColors.Lavender,
+                    onDelete = {
+                        vm.deleteBill(card.id) { removed ->
+                            scope.launch {
+                                val r = snackbar.showSnackbar("Deleted ${card.title}", actionLabel = "Undo", duration = SnackbarDuration.Short)
+                                if (r == SnackbarResult.ActionPerformed) vm.restoreBill(removed)
+                            }
+                        }
+                    },
+                ) {
+                    HistoryRow(card, onClick = { vm.openBill(card.id) })
+                }
+            }
+        }
+    }
+}
+
+/** One past split: receipt thumbnail, name, when, total, and how many friends have paid. */
+@Composable
+private fun HistoryRow(card: HistoryCard, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(BColors.White)
+            .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
+            .clickable(onClickLabel = "Open ${card.title}", onClick = onClick)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        ReceiptThumb(card.receiptPath)
+        Column(Modifier.weight(1f)) {
+            Text(card.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(card.dateText, style = MaterialTheme.typography.bodySmall, color = BColors.Muted)
+        }
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(card.totalText, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Pill(card.paidText, if (card.allPaid) BColors.GreenSoft else BColors.AmberSoft, if (card.allPaid) BColors.Green else BColors.AmberInk)
         }
     }
 }
@@ -279,7 +356,7 @@ internal fun WarningCard(text: String) {
 @Composable
 private fun ItemsStep(vm: SplitViewModel) {
     Column(Modifier.fillMaxSize()) {
-        StepHeader("Check the items", onBack = vm::back)
+        StepHeader("Check the items", onBack = vm::back) { ReceiptButton(vm) }
         LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 16.dp),
@@ -287,12 +364,18 @@ private fun ItemsStep(vm: SplitViewModel) {
         ) {
             item {
                 Text(
-                    if (vm.editItems.isEmpty()) "Add what was on the bill." else "Found ${vm.editItems.size} items. Fix anything the scan got wrong.",
+                    when {
+                        vm.editItems.isEmpty() -> "Add what was on the bill."
+                        vm.merchant != null -> "${vm.merchant}: found ${vm.editItems.size} items. Fix anything that looks wrong."
+                        else -> "Found ${vm.editItems.size} items. Fix anything that looks wrong."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = BColors.Muted,
                 )
             }
+            vm.scanNotice?.let { notice -> item(key = "notice") { WarningCard(notice) } }
             items(vm.editItems, key = { it.id }) { item ->
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = item.name,
@@ -318,6 +401,11 @@ private fun ItemsStep(vm: SplitViewModel) {
                     IconButton(onClick = { vm.removeItem(item.id) }) {
                         Icon(Icons.Rounded.Close, contentDescription = "Remove ${item.name}", tint = BColors.Muted)
                     }
+                }
+                // Modifiers Gemini found under the item, like "Less ice" or "No onion".
+                item.note?.let { note ->
+                    Text(note, style = MaterialTheme.typography.bodySmall, color = BColors.Muted, modifier = Modifier.padding(start = 6.dp))
+                }
                 }
             }
             item {
@@ -351,18 +439,54 @@ private fun ChargesCard(vm: SplitViewModel) {
     ) {
         Text("Charges", style = MaterialTheme.typography.titleMedium)
         Text(
-            "Shared by how much each person ordered, so a small eater pays less service and tax.",
+            "Shared by how much each person ordered, so a small eater pays less service and tax. Tap the tag under a charge if the item prices already include it.",
             style = MaterialTheme.typography.bodySmall,
             color = BColors.Muted,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ChargeField("Service", vm.serviceText, { vm.serviceText = it }, Modifier.weight(1f))
-            ChargeField("SST / tax", vm.taxText, { vm.taxText = it }, Modifier.weight(1f))
+            Column(Modifier.weight(1f)) {
+                ChargeField("Service", vm.serviceText, { vm.serviceText = it }, Modifier.fillMaxWidth())
+                if (vm.serviceText.isNotBlank()) IncludedToggle(vm.serviceIncluded) { vm.serviceIncluded = !vm.serviceIncluded }
+            }
+            Column(Modifier.weight(1f)) {
+                ChargeField("SST / tax", vm.taxText, { vm.taxText = it }, Modifier.fillMaxWidth())
+                if (vm.taxText.isNotBlank()) IncludedToggle(vm.taxIncluded) { vm.taxIncluded = !vm.taxIncluded }
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ChargeField("Rounding", vm.roundingText, { vm.roundingText = it }, Modifier.weight(1f), allowMinus = true)
             ChargeField("Discount", vm.discountText, { vm.discountText = it }, Modifier.weight(1f))
         }
+    }
+}
+
+/**
+ * Tells the user whether a charge is added on top of the items or already inside their prices, and lets
+ * them flip it. Many Malaysian receipts print SST even though the menu prices already include it.
+ */
+@Composable
+private fun IncludedToggle(included: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier
+            .padding(top = 6.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (included) BColors.GreenSoft else BColors.VioletSoft)
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            if (included) Icons.Rounded.CheckCircle else Icons.Rounded.Add,
+            contentDescription = null,
+            tint = if (included) BColors.Green else BColors.Violet,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            if (included) "Already in prices" else "Added on top",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (included) BColors.Green else BColors.Violet,
+        )
     }
 }
 
@@ -408,6 +532,8 @@ private fun TotalCheck(vm: SplitViewModel) {
             Text(
                 when {
                     receipt == null -> "No total found on the receipt to compare with."
+                    matches && (vm.taxIncluded || vm.serviceIncluded) ->
+                        "Matches the receipt. Prices already include ${if (vm.taxIncluded && vm.serviceIncluded) "service and tax" else if (vm.taxIncluded) "tax" else "service"}, so it is not added again."
                     matches -> "Matches the receipt."
                     else -> "Receipt says ${Money.format(receipt)}. Check for a missed or misread line."
                 },

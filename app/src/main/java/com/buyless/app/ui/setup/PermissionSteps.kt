@@ -48,7 +48,7 @@ fun PermissionSteps(permissions: PermissionState) {
             iconBg = BColors.VioletSoft,
             iconFg = BColors.Violet,
             title = "Notification access",
-            body = "Lets Buyless see payment alerts as they arrive.",
+            body = "Lets KiraLah see payment alerts as they arrive.",
             done = permissions.notificationAccess,
             onAllow = { context.launch(SystemAccess.notificationAccessIntent()) },
         )
@@ -63,7 +63,7 @@ fun PermissionSteps(permissions: PermissionState) {
             iconBg = BColors.AmberSoft,
             iconFg = BColors.Amber,
             title = "Keep running",
-            body = "Stops your phone from closing Buyless in the background. Recommended.",
+            body = "Stops your phone from closing KiraLah in the background. Recommended.",
             done = permissions.batteryExempt,
             onAllow = { context.launch(SystemAccess.batteryExemptionIntent(context)) },
         )

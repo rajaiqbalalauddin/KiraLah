@@ -32,6 +32,9 @@ data class AppTileUi(
     val kind: AppKind,
     val spentText: String,
     val countText: String,
+    /** Live balance, or null when the user has not set a starting balance for this app yet. */
+    val balanceText: String? = null,
+    val balanceSen: Long? = null,
 )
 
 fun TransactionEntity.toUi(today: LocalDate): TxnUi {

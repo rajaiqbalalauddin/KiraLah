@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 /** Design tokens from the Buyless canvas. One source so screens never hard-code hex values. */
 object BColors {
     val Violet = Color(0xFF5B3DF5)
+    /** KiraLah logo purple. Only for the brand mark and wordmark, so the logo matches the launcher icon. */
+    val Brand = Color(0xFF5B2FD6)
     val VioletDark = Color(0xFF4A2EDB)
     val VioletRing = Color(0xFF6E54FF)
     val VioletSoft = Color(0xFFECE8FF)

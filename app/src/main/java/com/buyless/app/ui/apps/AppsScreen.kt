@@ -75,7 +75,7 @@ fun AppsScreen(onBack: (() -> Unit)? = null) {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") }
                 }
                 Text(
-                    if (onBack != null) "Add an app" else "Apps",
+                    "Apps",
                     style = MaterialTheme.typography.headlineSmall,
                 )
             }
@@ -154,7 +154,7 @@ fun AppsScreen(onBack: (() -> Unit)? = null) {
                 Icon(Icons.Rounded.Lightbulb, contentDescription = null, tint = BColors.Amber)
                 Text(
                     "New apps learn from you. Their first few alerts go to Quick check. Once you confirm " +
-                        "3 correct guesses, Buyless records the rest by itself.",
+                        "3 correct guesses, KiraLah records the rest by itself.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = BColors.AmberInk,
                 )

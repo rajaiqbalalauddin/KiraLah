@@ -2,5 +2,7 @@
 <resources>
     <color name="lavender">#FFF5F3FF</color>
     <color name="violet">#FF5B3DF5</color>
+    <!-- KiraLah logo purple. Used for the launcher icon background and the wordmark. -->
+    <color name="kiralah_purple">#FF5B2FD6</color>
     <color name="yellow">#FFFFC940</color>
 </resources>

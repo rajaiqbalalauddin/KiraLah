@@ -1,5 +1,6 @@
 package com.buyless.app.ui.setup
 
+import com.buyless.app.ui.components.KiraLahMark
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.NotificationsNone
 import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -70,24 +70,11 @@ fun SetupScreen(onDone: () -> Unit, onAddApp: () -> Unit) {
         item(key = "hero") {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Box {
-                        Box(
-                            Modifier.size(60.dp).clip(RoundedCornerShape(20.dp)).background(BColors.Violet),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(Icons.Rounded.NotificationsNone, contentDescription = null, tint = BColors.White, modifier = Modifier.size(30.dp))
-                        }
-                        Box(
-                            Modifier.offset(x = 44.dp, y = (-6).dp).size(22.dp).clip(CircleShape).background(BColors.Yellow),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(Icons.Rounded.Add, contentDescription = null, tint = BColors.YellowInk, modifier = Modifier.size(14.dp))
-                        }
-                    }
+                    KiraLahMark(size = 60.dp)
                     Text("Spending that tracks itself.", style = MaterialTheme.typography.headlineMedium)
                 }
                 Text(
-                    "Buyless reads payment alerts from your bank and e-wallet apps and records them for you.",
+                    "KiraLah reads payment alerts from your bank and e-wallet apps and records them for you.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = BColors.Muted,
                 )

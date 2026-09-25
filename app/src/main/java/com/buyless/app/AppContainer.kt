@@ -4,9 +4,12 @@ import android.app.Application
 import android.content.Context
 import com.buyless.app.data.db.BuylessDatabase
 import com.buyless.app.data.repo.AppsRepository
+import com.buyless.app.data.repo.FriendsRepository
 import com.buyless.app.data.repo.QrRepository
 import com.buyless.app.data.repo.SampleRepository
+import com.buyless.app.data.repo.SplitHistoryRepository
 import com.buyless.app.data.repo.TransactionRepository
+import com.buyless.app.share.PayCardFiles
 import com.buyless.app.split.ReceiptScanner
 import com.buyless.app.util.AppPrefs
 import java.time.YearMonth
@@ -32,8 +35,11 @@ class AppContainer(val application: Application) {
     val apps: AppsRepository by lazy { AppsRepository(appContext, database.watchedAppDao()) }
     val prefs: AppPrefs by lazy { AppPrefs(appContext) }
     val samples: SampleRepository by lazy { SampleRepository(database.rawNotificationDao()) }
+    val splitHistory: SplitHistoryRepository by lazy { SplitHistoryRepository(appContext, database.splitBillDao()) }
+    val friends: FriendsRepository by lazy { FriendsRepository(database.friendDao(), database.splitBillDao()) }
+    val payCards: PayCardFiles by lazy { PayCardFiles(appContext) }
     val qrs: QrRepository by lazy { QrRepository(appContext, database.paymentQrDao()) }
-    val receiptScanner: ReceiptScanner by lazy { ReceiptScanner(appContext) }
+    val receiptScanner: ReceiptScanner by lazy { ReceiptScanner(appContext, BuildConfig.GEMINI_API_KEY) }
 
     /** Month being viewed. Shared so Home and Activity always show the same month. */
     val selectedMonth = MutableStateFlow(YearMonth.now())
@@ -48,7 +54,14 @@ class BuylessApp : Application() {
         super.onCreate()
         container = AppContainer(this)
         // Off the main thread so it never delays the first frame.
-        container.appScope.launch { container.transactions.housekeeping() }
+        container.appScope.launch {
+            container.transactions.housekeeping()
+            container.splitHistory.cleanOrphanPhotos()
+            container.friends.backfillFromHistory()
+            if (!container.prefs.qrsCropped) {
+                runCatching { container.qrs.recropSaved() }.onSuccess { container.prefs.qrsCropped = true }
+            }
+        }
     }
 }
 

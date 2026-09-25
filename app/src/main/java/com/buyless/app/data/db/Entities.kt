@@ -46,6 +46,9 @@ data class WatchedAppEntity(
     val kind: String,
     val confirmedCount: Int = 0,
     val addedAt: Long,
+    /** Balance the user typed in, and when. Live balance = this + money in - money out since then. */
+    val balanceSen: Long? = null,
+    val balanceSetAt: Long? = null,
 )
 
 /**
@@ -73,6 +76,12 @@ data class PendingEntity(
     val guessMerchant: String? = null,
     val guessCategory: String? = null,
 )
+
+/** Live balance of one app, worked out in SQL from the starting balance plus later transactions. */
+data class AppBalance(val packageName: String, val balanceSen: Long)
+
+/** One month in the Recap archive. ym is "2026-09". */
+data class MonthSummary(val ym: String, val outSen: Long, val count: Int)
 
 /** Result row of the per-app spending query. */
 data class AppTotal(
@@ -107,4 +116,40 @@ data class RawNotificationEntity(
     val body: String,
     val postedAt: Long,
     val matched: Boolean,
+)
+
+/**
+ * A saved bill split. Summary columns (title, total, paid count) drive the history list without
+ * parsing anything; the full board (people, items, owners, charges, who paid) is one JSON blob,
+ * because it is always loaded and saved as a whole.
+ */
+@Entity(tableName = "split_bills", indices = [Index("updatedAt")])
+data class SplitBillEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val title: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val totalSen: Long,
+    val peopleCount: Int,
+    val paidCount: Int,
+    val receiptPath: String?,
+    val stateJson: String,
+)
+
+/**
+ * Someone you split bills with. Saved automatically the first time they join a bill, so the people
+ * drawer fills itself. nameKey (lowercase, single spaces) is unique, so "Aina" is never saved twice.
+ * phone is digits with country code ("60123456789"), ready for WhatsApp.
+ */
+@Entity(tableName = "friends", indices = [Index(value = ["nameKey"], unique = true)])
+data class FriendEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val nameKey: String,
+    val phone: String? = null,
+    val colorIndex: Int,
+    val favourite: Boolean = false,
+    val timesSplit: Int = 0,
+    val lastSplitAt: Long = 0,
+    val createdAt: Long,
 )

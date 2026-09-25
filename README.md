@@ -40,12 +40,68 @@ ones marked "Not recognised" (long numbers are masked) and turn them into a new 
 pre-filled. After 3 guesses you save without changes, that app is recorded automatically. Change
 `LEARNING_THRESHOLD` in `data/model/Models.kt` to adjust this.
 
+**App balances.** Tap an app tile on Home and type what that app shows right now. Buyless stores it as a
+starting point (no transaction is created) and keeps the balance live from alerts after that moment.
+Transfers between your own apps do move balances, even though they are not counted as spending.
+
+**Removing spending.** Swipe any transaction left in Activity or Recent to delete it, with Undo in the
+snackbar. If it was half of a transfer pair, Undo re-links the pair.
+
+**Recap tab.** A Spotify Wrapped style archive: a card per month plus one per year. Tapping one plays a
+full-screen story (tap right or left to move, hold to pause): total spent with a count-up, change vs the
+previous period, top categories, number one merchant, biggest payment, busiest weekday, top apps, a money
+personality, and a shareable summary. Month totals come from one grouped SQL query; transactions are only
+loaded when a story plays. The facts are built in `recap/RecapBuilder.kt`, which is unit tested.
+
+**Receipt reading with Gemini.** The Split tab sends the receipt photo (shrunk to 1600 px, around 300 KB)
+to Gemini, which returns every item, its quantity, add-ons, modifiers ("Less ice") and the service, tax,
+rounding and discount lines as JSON. `gemini-3.5-flash-lite` reads first because it is fastest. If its
+items do not add up to the printed total, `gemini-3.8-flash` reads it once more. With no key or no
+internet, the on-device ML Kit reader takes over. Model ids are in `split/GeminiReceiptReader.kt`.
+
+Put your key in `local.properties` (git-ignored, so it never reaches GitHub):
+
+```
+GEMINI_API_KEY=your-key-here
+```
+
+Anyone with the APK can extract a key built into it, so keep this build to yourself, or move the call to
+a small server before sharing the app.
+
+**Tax already in the prices.** Many Malaysian receipts print SST even though the menu prices include it
+("Total Incl. 6% SST"). `split/ChargeReconciler.kt` tries each way the service charge and tax could
+combine with the items (both on top, tax inside, both inside, service inside) and keeps the one that lands
+on the printed total within 5 sen. Ties go to the most common layout (charges on top). Gemini's
+`pricesIncludeTax` flag only decides when there is no total or nothing adds up. The Charges card shows
+"Added on top" or "Already in prices" under each charge, and a tap flips it.
+
+**Split history.** Every split is saved when its totals are first shown, and again whenever someone is
+marked paid. Past splits are listed under the scan buttons on the Split tab, with a receipt thumbnail,
+the total and how many friends have paid. Tap one to reopen its Totals screen, including the QR cards.
+The receipt photo is kept as a private copy (the camera file is temporary) and opens full screen with
+pinch to zoom. Swipe a past split left to delete it, with Undo.
+
 **Split tab.** Scan a receipt (camera or gallery), check the items, then hold and drag each item block onto
 the person who had it (or onto Everyone to share it). Tapping a block and then tapping people works too.
 Service, SST, rounding and discounts are shared by how much each person ordered, and totals always add up
 to the bill to the sen. The Totals screen shows a full-screen card per friend with their amount and your
 saved payment QR (MAE, TNG, DuitNow...), with "Next person" to pass the phone round the table.
-OCR runs on the phone with ML Kit; the photo is never uploaded.
+
+**Friends and the people drawer.** Everyone you add to a bill is saved as a friend automatically
+(`friends` table, one row per name ignoring capitals). On the board, "Add" opens a drawer: favourites
+as one-tap chips on top, then everyone else ranked by how often you split with them. Tick several and
+add them at once, type a new name, or pick from your phone contacts (Android's own picker, so Buyless
+never needs the contacts permission). Star to favourite, hold a name to add a number, edit or forget it.
+Friends are filled once from older saved splits when you update.
+
+**WhatsApp.** On Totals, each friend's card has a WhatsApp button. Buyless draws a picture with their
+amount and your payment QR (`share/PayCardRenderer.kt`), writes a short message with their items
+(`share/PayMessage.kt`), and opens that friend's chat with both attached. You tap Send. "Everyone" goes
+through all friends with a number: the next chat opens when you come back to Buyless. "Group chat" sends
+one summary picture with everyone's amount and who has paid. Numbers like 012-345 6789 are turned into
+60123456789 automatically. No WhatsApp API is used, so it is free and sends from your own number.
+Opening a specific chat with a picture uses WhatsApp's undocumented `jid` extra; if that ever stops
+working, WhatsApp shows its chat picker, and without WhatsApp the normal share sheet opens.
 
 **Transfers between your own apps.** Money going out of one watched app and into another with the same
 amount within 10 minutes is paired and left out of totals. You can undo this on any transaction.

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 // App module build config. Release builds are minified with R8 so unused code (including most of
 // the extended icon set) is stripped, keeping the APK small and startup fast.
 plugins {
@@ -5,6 +7,12 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+}
+
+// Secrets live in local.properties, which is git-ignored, so the Gemini key never reaches GitHub.
+val localProps = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
 }
 
 android {
@@ -17,6 +25,8 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+
+        buildConfigField("String", "GEMINI_API_KEY", "\"${localProps.getProperty("GEMINI_API_KEY", "")}\"")
     }
 
     buildTypes {
@@ -38,6 +48,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -63,6 +74,10 @@ dependencies {
 
     // On-device OCR for the Split tab. Bundled model: works offline, adds a few MB to the APK.
     implementation(libs.mlkit.text.recognition)
+    // Finds the QR in a saved payment screenshot so only the code is kept. Bundled model, works offline.
+    implementation(libs.mlkit.barcode.scanning)
 
     testImplementation(libs.junit)
+    // Android's org.json is a stub in local unit tests; the real library lets JSON code be tested on a PC.
+    testImplementation(libs.org.json)
 }

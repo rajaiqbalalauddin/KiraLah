@@ -24,6 +24,8 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import com.buyless.app.data.db.TransactionEntity
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -51,7 +53,7 @@ data class ActivityUiState(
  * query per keystroke. Search input is debounced so typing does not rebuild the list on every letter.
  */
 class ActivityViewModel(
-    tx: TransactionRepository,
+    private val tx: TransactionRepository,
     apps: AppsRepository,
     private val month: MutableStateFlow<YearMonth>,
 ) : ViewModel() {
@@ -119,6 +121,15 @@ class ActivityViewModel(
     }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ActivityUiState())
+
+    /** Swipe delete. Hands the removed row back so the screen can offer Undo. */
+    fun delete(id: Long, onDeleted: (TransactionEntity) -> Unit) {
+        viewModelScope.launch { tx.deleteForUndo(id)?.let(onDeleted) }
+    }
+
+    fun restore(entity: TransactionEntity) {
+        viewModelScope.launch { tx.restore(entity) }
+    }
 
     fun selectApp(packageName: String?) {
         selectedApp.value = packageName

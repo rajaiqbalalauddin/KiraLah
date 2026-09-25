@@ -1,24 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Launcher icon: a bell (payment alert) with a yellow plus dot, matching the Setup screen mark. -->
+<!-- KiraLah launcher mark: a banknote with a minus in its seal ("spend less"). The seal and corner
+     dots are holes (evenOdd), so the purple background shows through and the same drawable works
+     as the themed (monochrome) icon on Android 13+. Art sits inside the 72dp visible area. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="5"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M38,62 L38,50 A16,16 0 0 1 70,50 L70,62 L75,67 L33,67 Z" />
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M34.5,39 H75.5 A6,6 0 0 1 81.5,45 V63 A6,6 0 0 1 75.5,69 H34.5 A6,6 0 0 1 28.5,63 V45 A6,6 0 0 1 34.5,39 Z
+            M45,54 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0 Z
+            M34.125,47.25 a2.625,2.625 0 1,0 5.25,0 a2.625,2.625 0 1,0 -5.25,0 Z
+            M68.625,60.75 a2.625,2.625 0 1,0 5.25,0 a2.625,2.625 0 1,0 -5.25,0 Z" />
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="5"
-        android:strokeLineCap="round"
-        android:pathData="M48,75 A6,6 0 0 0 60,75" />
-    <path
-        android:fillColor="@color/yellow"
-        android:pathData="M73,31 m-9,0 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M51,51.75 H57 A2.25,2.25 0 0 1 57,56.25 H51 A2.25,2.25 0 0 1 51,51.75 Z" />
 </vector>

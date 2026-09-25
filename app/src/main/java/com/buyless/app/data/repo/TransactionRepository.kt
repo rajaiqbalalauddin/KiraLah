@@ -116,6 +116,29 @@ class TransactionRepository(private val db: BuylessDatabase) {
         }
     }
 
+    /**
+     * Puts back a row removed by [delete]. If it was one half of a transfer between your own apps,
+     * its partner is re-linked too, so totals end up exactly as before.
+     */
+    suspend fun restore(entity: TransactionEntity) {
+        db.withTransaction {
+            val partner = entity.linkedId?.let { txDao.getById(it) }
+            txDao.restore(if (partner == null) entity.copy(isInternal = false, linkedId = null) else entity)
+            if (partner != null) txDao.markInternal(partner.id, entity.id)
+        }
+    }
+
+    fun observeMonths() = txDao.observeMonths().distinctUntilChanged()
+
+    suspend fun countedInRange(from: Long, to: Long): List<TransactionEntity> = txDao.countedInRange(from, to)
+
+    /** Deletes a row and returns it, so the caller can offer Undo. */
+    suspend fun deleteForUndo(id: Long): TransactionEntity? {
+        val old = txDao.getById(id) ?: return null
+        delete(id)
+        return old
+    }
+
     suspend fun delete(id: Long) {
         db.withTransaction {
             val old = txDao.getById(id) ?: return@withTransaction

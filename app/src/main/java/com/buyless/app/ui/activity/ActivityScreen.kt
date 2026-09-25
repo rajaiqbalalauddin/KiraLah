@@ -32,6 +32,15 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import com.buyless.app.ui.components.SwipeToDelete
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -58,7 +67,10 @@ fun ActivityScreen(onOpenTransaction: (Long) -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
     var searching by rememberSaveable { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp),
@@ -141,11 +153,25 @@ fun ActivityScreen(onOpenTransaction: (Long) -> Unit) {
                         .padding(horizontal = 14.dp, vertical = 4.dp),
                 ) {
                     section.items.forEach { item ->
-                        TransactionRow(item, onClick = { onOpenTransaction(item.id) })
+                        // key() ties each swipe state to its transaction, not to its position in the list.
+                        key(item.id) {
+                            SwipeToDelete(onDelete = {
+                                vm.delete(item.id) { removed ->
+                                    scope.launch {
+                                        val result = snackbar.showSnackbar("Deleted ${item.title}", actionLabel = "Undo", duration = SnackbarDuration.Short)
+                                        if (result == SnackbarResult.ActionPerformed) vm.restore(removed)
+                                    }
+                                }
+                            }) {
+                                TransactionRow(item, onClick = { onOpenTransaction(item.id) })
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+    SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp))
     }
 }
 

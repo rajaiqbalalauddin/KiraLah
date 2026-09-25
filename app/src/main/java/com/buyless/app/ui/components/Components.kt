@@ -26,6 +26,13 @@ import androidx.compose.material.icons.rounded.Receipt
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -203,5 +210,43 @@ fun EmptyState(icon: ImageVector, title: String, body: String, modifier: Modifie
         IconDot(icon, BColors.VioletSoft, BColors.Violet, size = 56.dp, iconSize = 28.dp)
         Text(title, style = MaterialTheme.typography.titleMedium)
         Text(body, style = MaterialTheme.typography.bodyMedium, color = BColors.Muted, textAlign = TextAlign.Center)
+    }
+}
+
+/**
+ * Swipe a row to the left to delete it. The red layer behind the row explains what will happen, and
+ * the caller shows an Undo snackbar, so a slip of the thumb is never permanent.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SwipeToDelete(onDelete: () -> Unit, surface: Color = BColors.White, content: @Composable () -> Unit) {
+    val latest by rememberUpdatedState(onDelete)
+    val state = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) {
+                latest()
+                true
+            } else {
+                false
+            }
+        },
+        positionalThreshold = { distance -> distance * 0.4f },
+    )
+    SwipeToDismissBox(
+        state = state,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Row(
+                Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp)).background(BColors.Danger).padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Delete", style = MaterialTheme.typography.titleSmall, color = BColors.White)
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Rounded.DeleteOutline, contentDescription = null, tint = BColors.White)
+            }
+        },
+    ) {
+        Box(Modifier.background(surface)) { content() }
     }
 }

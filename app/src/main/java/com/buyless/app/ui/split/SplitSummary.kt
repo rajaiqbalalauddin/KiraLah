@@ -58,6 +58,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -77,6 +78,18 @@ import com.buyless.app.ui.components.Pill
 import com.buyless.app.ui.theme.BColors
 import com.buyless.app.util.Money
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.buyless.app.share.WhatsAppSender
+import kotlinx.coroutines.delay
 
 /** Step 4: who owes what, which QR friends should pay to, and a full-screen card to show them. */
 @Composable
@@ -89,10 +102,30 @@ internal fun SplitSummary(vm: SplitViewModel) {
     val friends = vm.people.filter { it.id != SplitViewModel.ME_ID }
     val owedToMe = friends.sumOf { shares[it.id]?.totalSen ?: 0L }
     val collected = friends.filter { it.id in vm.paid }.sumOf { shares[it.id]?.totalSen ?: 0L }
+    val context = LocalContext.current
+    var askNumberFor by rememberSaveable { mutableStateOf<Long?>(null) }
+
+    // Pay cards are drawn in the ViewModel; opening WhatsApp needs this screen's Activity context.
+    LaunchedEffect(vm) {
+        vm.shareEvents.collect { event -> vm.onShared(event.personId, WhatsAppSender.send(context, event.request)) }
+    }
+    // "Send to everyone": when the user comes back from WhatsApp, open the next friend's chat.
+    var resumes by remember { mutableIntStateOf(0) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { resumes++ }
+    LaunchedEffect(resumes) {
+        if (vm.awaitingReturn) {
+            delay(600) // let the screen settle so the jump back to WhatsApp does not feel like a glitch
+            vm.onReturnedFromChat()
+        }
+    }
+    val sendOrAsk: (Long) -> Unit = { id ->
+        if (vm.people.firstOrNull { it.id == id }?.phone == null) askNumberFor = id else vm.sendTo(id)
+    }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             StepHeader("Totals", onBack = vm::back) {
+                ReceiptButton(vm)
                 IconButton(onClick = vm::startOver) { Icon(Icons.Rounded.Refresh, contentDescription = "Start a new split") }
             }
             LazyColumn(
@@ -117,6 +150,8 @@ internal fun SplitSummary(vm: SplitViewModel) {
 
                 item { QrPicker(qrs, vm.selectedQrId, vm::selectQr, onAdd = pickQr, onDelete = vm::deleteQr) }
 
+                if (friends.isNotEmpty()) item { WhatsAppCard(vm) }
+
                 items(vm.people, key = { it.id }) { person ->
                     PersonTotalCard(
                         person = person,
@@ -124,6 +159,7 @@ internal fun SplitSummary(vm: SplitViewModel) {
                         total = shares[person.id]?.totalSen ?: 0L,
                         extras = shares[person.id]?.extrasSen ?: 0L,
                         isPaid = person.id in vm.paid,
+                        onWhatsApp = { sendOrAsk(person.id) },
                     )
                 }
             }
@@ -136,6 +172,35 @@ internal fun SplitSummary(vm: SplitViewModel) {
             exit = slideOutVertically { it } + fadeOut(),
         ) {
             PayCard(vm, shares.mapValues { it.value.totalSen }, qrs, onAddQr = pickQr)
+        }
+    }
+
+    askNumberFor?.let { id ->
+        val person = vm.people.firstOrNull { it.id == id }
+        if (person != null) {
+            key(id) {
+                PersonFormDialog(
+                    title = "${person.name}'s WhatsApp",
+                    message = "Saved with ${person.name}, so next time it goes straight to their chat.",
+                    initialName = person.name,
+                    initialPhone = "",
+                    confirm = "Save and send",
+                    showName = false,
+                    onDismiss = { askNumberFor = null },
+                    onConfirm = { _, phone ->
+                        if (phone != null) vm.setPhone(id, phone)
+                        askNumberFor = null
+                        vm.sendTo(id)
+                    },
+                    removeLabel = "Send without",
+                    removeIsDanger = false,
+                    onRemove = {
+                        // No number: WhatsApp opens its own chat picker instead.
+                        askNumberFor = null
+                        vm.sendTo(id)
+                    },
+                )
+            }
         }
     }
 
@@ -232,7 +297,7 @@ private fun QrPicker(
 }
 
 @Composable
-private fun PersonTotalCard(person: Person, vm: SplitViewModel, total: Long, extras: Long, isPaid: Boolean) {
+private fun PersonTotalCard(person: Person, vm: SplitViewModel, total: Long, extras: Long, isPaid: Boolean, onWhatsApp: () -> Unit) {
     val isMe = person.id == SplitViewModel.ME_ID
     val mine = vm.items.filter { person.id in it.owners }
     Column(
@@ -248,11 +313,33 @@ private fun PersonTotalCard(person: Person, vm: SplitViewModel, total: Long, ext
             Avatar(person, 44.dp)
             Column(Modifier.weight(1f)) {
                 Text(if (isMe) "Your share" else person.name, style = MaterialTheme.typography.titleMedium)
-                Text("${mine.size} item${if (mine.size == 1) "" else "s"}", style = MaterialTheme.typography.bodySmall, color = BColors.Muted)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${mine.size} item${if (mine.size == 1) "" else "s"}", style = MaterialTheme.typography.bodySmall, color = BColors.Muted)
+                    if (!isMe && person.id in vm.sent) Pill("Sent", WhatsAppSoft, WhatsAppInk)
+                }
             }
-            Column(horizontalAlignment = Alignment.End) {
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(Money.format(total), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
-                if (isPaid) Pill("Paid", BColors.GreenSoft, BColors.Green)
+                if (!isMe) {
+                    // Tap to toggle, so marking paid does not need its own button row.
+                    Row(
+                        Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isPaid) BColors.GreenSoft else BColors.Lavender)
+                            .clickable(onClickLabel = if (isPaid) "Mark ${person.name} as not paid" else "Mark ${person.name} as paid") { vm.togglePaid(person.id) }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            if (isPaid) Icons.Rounded.CheckCircle else Icons.Rounded.Check,
+                            contentDescription = null,
+                            tint = if (isPaid) BColors.Green else BColors.Muted,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Text(if (isPaid) "Paid" else "Mark paid", style = MaterialTheme.typography.labelMedium, color = if (isPaid) BColors.Green else BColors.Muted)
+                    }
+                }
             }
         }
         mine.forEach { item ->
@@ -285,11 +372,104 @@ private fun PersonTotalCard(person: Person, vm: SplitViewModel, total: Long, ext
                     Spacer(Modifier.width(6.dp))
                     Text("Show QR")
                 }
-                TextButton(onClick = { vm.togglePaid(person.id) }) {
-                    Icon(if (isPaid) Icons.Rounded.CheckCircle else Icons.Rounded.Check, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
-                    Text(if (isPaid) "Paid" else "Mark paid")
+                Button(
+                    onClick = onWhatsApp,
+                    enabled = vm.preparingShare == null,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = WhatsAppGreen, contentColor = WhatsAppInk),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    if (vm.preparingShare == person.id) {
+                        CircularProgressIndicator(Modifier.size(18.dp), color = WhatsAppInk, strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (person.phone == null) "Add number" else "WhatsApp", maxLines = 1)
                 }
+            }
+        }
+    }
+}
+
+/** WhatsApp's brand green with dark text: white on this green is too faint to read comfortably. */
+private val WhatsAppGreen = Color(0xFF25D366)
+private val WhatsAppInk = Color(0xFF063B2B)
+private val WhatsAppSoft = Color(0xFFDCF8E7)
+
+/**
+ * Sends everyone their pay card in one go, or one summary to the group chat. Buyless opens WhatsApp
+ * with everything ready and the user taps Send, which keeps it free and on their own number.
+ */
+@Composable
+private fun WhatsAppCard(vm: SplitViewModel) {
+    val sendable = vm.sendableIds.size
+    val missing = vm.missingNumberCount
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(WhatsAppSoft)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = null, tint = WhatsAppInk, modifier = Modifier.size(20.dp))
+            Text("Send on WhatsApp", style = MaterialTheme.typography.titleMedium, color = WhatsAppInk)
+        }
+
+        if (vm.sendQueueTotal > 0) {
+            // Progress while going through everyone. The next chat opens when you come back here.
+            val done = vm.sendQueueTotal - vm.sendQueue.size
+            val next = vm.people.firstOrNull { it.id == vm.sendQueue.firstOrNull() }?.name
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Sending $done of ${vm.sendQueueTotal}", style = MaterialTheme.typography.titleSmall, color = WhatsAppInk)
+                    Text(
+                        if (next != null) "Tap Send in WhatsApp, then come back. $next is next." else "Tap Send in WhatsApp. That is everyone.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = WhatsAppInk,
+                    )
+                }
+                TextButton(onClick = vm::stopSendAll) { Text("Stop", color = WhatsAppInk) }
+            }
+        } else {
+            Text(
+                "Each friend gets a picture with their amount and your QR. WhatsApp opens with it ready, you tap Send.",
+                style = MaterialTheme.typography.bodySmall,
+                color = WhatsAppInk,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = vm::startSendAll,
+                    enabled = sendable > 0 && vm.preparingShare == null,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = WhatsAppGreen, contentColor = WhatsAppInk),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (sendable > 0) "Everyone ($sendable)" else "Everyone", maxLines = 1)
+                }
+                OutlinedButton(
+                    onClick = vm::sendToGroup,
+                    enabled = vm.preparingShare == null,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    if (vm.preparingShare == SplitViewModel.GROUP_ID) {
+                        CircularProgressIndicator(Modifier.size(18.dp), color = WhatsAppInk, strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Rounded.Forum, contentDescription = null, tint = WhatsAppInk, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Text("Group chat", color = WhatsAppInk, maxLines = 1)
+                }
+            }
+            if (missing > 0) {
+                Text(
+                    "$missing ${if (missing == 1) "friend has" else "friends have"} no number yet. Tap Add number on their card.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = WhatsAppInk,
+                )
             }
         }
     }
