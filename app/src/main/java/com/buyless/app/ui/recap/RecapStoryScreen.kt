@@ -73,7 +73,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.buyless.app.recap.RecapData
 import com.buyless.app.ui.components.appViewModel
-import com.buyless.app.ui.components.style
+import com.buyless.app.ui.categories.LocalCategoryCatalog
 import com.buyless.app.ui.theme.BColors
 import com.buyless.app.util.Dates
 import com.buyless.app.util.Money
@@ -97,7 +97,7 @@ fun RecapStoryScreen(onClose: () -> Unit) {
 
     val recap = data
     if (recap == null) {
-        Box(Modifier.fillMaxSize().background(BColors.Ink), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize().background(BColors.Night), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = BColors.Yellow)
         }
         return
@@ -181,18 +181,18 @@ fun RecapStoryScreen(onClose: () -> Unit) {
 
 private fun buildSlides(d: RecapData): List<Slide> = buildList {
     add(Slide("intro", BColors.Violet, Color.White) { r, fg -> IntroSlide(r, fg) })
-    add(Slide("total", BColors.Ink, Color.White) { r, fg -> TotalSlide(r, fg) })
+    add(Slide("total", BColors.Night, Color.White) { r, fg -> TotalSlide(r, fg) })
     d.changePercent?.let { change ->
         val less = change < 0
         add(Slide("compare", if (less) Color(0xFF10B981) else BColors.Coral, if (less) Color(0xFF063B2B) else Color.White) { r, fg -> CompareSlide(r, fg) })
     }
-    if (d.categories.isNotEmpty()) add(Slide("categories", BColors.Yellow, BColors.Ink) { r, fg -> CategorySlide(r, fg) })
+    if (d.categories.isNotEmpty()) add(Slide("categories", BColors.Yellow, BColors.Night) { r, fg -> CategorySlide(r, fg) })
     if (d.topMerchants.isNotEmpty()) add(Slide("merchant", BColors.Coral, Color.White) { r, fg -> MerchantSlide(r, fg) })
     if (d.biggest != null) add(Slide("biggest", Color(0xFF2563EB), Color.White) { r, fg -> BiggestSlide(r, fg) })
     if (d.busiestDay != null) add(Slide("rhythm", Color(0xFF0FA3A3), Color.White) { r, fg -> RhythmSlide(r, fg) })
     if (d.apps.isNotEmpty()) add(Slide("apps", Color(0xFFE0457B), Color.White) { r, fg -> AppsSlide(r, fg) })
     add(Slide("personality", BColors.Violet, Color.White) { r, fg -> PersonalitySlide(r, fg) })
-    add(Slide("summary", BColors.Ink, Color.White) { r, fg -> SummarySlide(r, fg) })
+    add(Slide("summary", BColors.Night, Color.White) { r, fg -> SummarySlide(r, fg) })
 }
 
 // ---------------- Slides ----------------
@@ -240,13 +240,14 @@ private fun CompareSlide(d: RecapData, fg: Color) {
 @Composable
 private fun CategorySlide(d: RecapData, fg: Color) {
     val top = d.categories.take(4)
+    val catalog = LocalCategoryCatalog.current
     val max = top.maxOf { it.second }.coerceAtLeast(1)
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
         Kicker("Where it went", fg)
-        Big(top.first().first.style().label, fg, 48.sp)
+        Big(catalog.style(top.first().first).label, fg, 48.sp)
         Spacer(Modifier.height(24.dp))
         top.forEachIndexed { i, (cat, sen) ->
-            val s = cat.style()
+            val s = catalog.style(cat)
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
                 Box(Modifier.size(34.dp).clip(CircleShape).background(fg.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
                     Icon(s.icon, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
@@ -346,7 +347,7 @@ private fun SummarySlide(d: RecapData, fg: Color) {
         StatRow("Spent", Money.format(d.spentSen), fg)
         StatRow("Money in", Money.format(d.inSen), fg)
         StatRow("Payments", d.payments.toString(), fg)
-        d.categories.firstOrNull()?.let { StatRow("Top category", it.first.style().label, fg) }
+        d.categories.firstOrNull()?.let { StatRow("Top category", LocalCategoryCatalog.current.style(it.first).label, fg) }
         d.topMerchants.firstOrNull()?.let { StatRow("Top spot", it.name, fg) }
         d.apps.firstOrNull()?.let { StatRow("Go-to app", it.first, fg) }
     }
@@ -355,6 +356,9 @@ private fun SummarySlide(d: RecapData, fg: Color) {
 @Composable
 private fun SummaryActions(d: RecapData, fg: Color, bg: Color, onReplay: () -> Unit, modifier: Modifier) {
     val context = LocalContext.current
+    // Resolved here because the share text is built outside composition, where the catalog is not reachable.
+    val catalog = LocalCategoryCatalog.current
+    val topCategory = d.categories.firstOrNull()?.let { catalog.style(it.first).label }
     Row(modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Button(
             onClick = onReplay,
@@ -368,7 +372,7 @@ private fun SummaryActions(d: RecapData, fg: Color, bg: Color, onReplay: () -> U
         }
         Button(
             onClick = {
-                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, shareText(d))
+                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, shareText(d, topCategory))
                 context.startActivity(Intent.createChooser(send, "Share your recap"))
             },
             colors = ButtonDefaults.buttonColors(containerColor = fg, contentColor = bg),
@@ -382,11 +386,11 @@ private fun SummaryActions(d: RecapData, fg: Color, bg: Color, onReplay: () -> U
     }
 }
 
-private fun shareText(d: RecapData): String = buildString {
+private fun shareText(d: RecapData, topCategory: String?): String = buildString {
     appendLine("My ${d.periodLabel} money recap, by KiraLah")
     appendLine("${d.personality.title}: ${d.personality.line}")
     appendLine("Spent ${Money.format(d.spentSen)} across ${d.payments} payments")
-    d.categories.firstOrNull()?.let { appendLine("Top category: ${it.first.style().label}") }
+    topCategory?.let { appendLine("Top category: $it") }
     d.topMerchants.firstOrNull()?.let { appendLine("Top spot: ${it.name} (${it.visits} visits)") }
 }
 

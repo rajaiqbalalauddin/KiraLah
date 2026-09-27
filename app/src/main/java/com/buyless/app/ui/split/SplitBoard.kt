@@ -253,7 +253,7 @@ private fun ItemBlock(
     val tilt by animateFloatAsState(if (item.assigned || selected) 0f else ((index % 5) - 2) * 1.2f, label = "tilt")
     val lift by animateFloatAsState(if (selected) 1.06f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy), label = "lift")
     val owners = people.filter { it.id in item.owners }
-    val fill = if (item.assigned) BColors.White else BlockFills[index % BlockFills.size]
+    val fill = if (item.assigned) BColors.Surface else BlockFills[index % BlockFills.size]
     val borderColor = when {
         selected -> BColors.Violet
         owners.size == 1 -> PersonColors[owners[0].colorIndex].first
@@ -282,7 +282,7 @@ private fun ItemBlock(
         if (owners.isNotEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 owners.take(5).forEachIndexed { i, p ->
-                    Avatar(p, size = 22.dp, modifier = Modifier.offset(x = (-6 * i).dp), ring = BColors.White)
+                    Avatar(p, size = 22.dp, modifier = Modifier.offset(x = (-6 * i).dp), ring = BColors.Surface)
                 }
                 if (owners.size > 1) {
                     Text(
@@ -312,7 +312,7 @@ private fun PeopleTray(
             .fillMaxWidth()
             .shadow(20.dp, RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
             .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .background(BColors.White)
+            .background(BColors.Surface)
             .padding(top = 14.dp),
     ) {
         AnimatedVisibility(visible = selected != null, enter = fadeIn() + scaleIn(initialScale = 0.9f), exit = fadeOut() + scaleOut()) {
@@ -362,7 +362,7 @@ private fun PeopleTray(
                     amount = "Share it",
                 ) { size ->
                     Box(Modifier.size(size).clip(CircleShape).background(BColors.Ink), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Groups, contentDescription = null, tint = BColors.White)
+                        Icon(Icons.Rounded.Groups, contentDescription = null, tint = BColors.Surface)
                     }
                 }
             }
@@ -441,9 +441,9 @@ private fun DropTarget(
             avatar(56.dp)
             if (checked) {
                 Box(
-                    Modifier.align(Alignment.BottomEnd).size(20.dp).clip(CircleShape).background(BColors.Green).border(2.dp, BColors.White, CircleShape),
+                    Modifier.align(Alignment.BottomEnd).size(20.dp).clip(CircleShape).background(BColors.Green).border(2.dp, BColors.Surface, CircleShape),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Rounded.Check, contentDescription = "Has this item", tint = BColors.White, modifier = Modifier.size(12.dp)) }
+                ) { Icon(Icons.Rounded.Check, contentDescription = "Has this item", tint = BColors.OnColor, modifier = Modifier.size(12.dp)) }
             }
         }
         Text(label, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)

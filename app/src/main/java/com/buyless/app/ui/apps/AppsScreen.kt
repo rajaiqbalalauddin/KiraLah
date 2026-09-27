@@ -90,8 +90,8 @@ fun AppsScreen(onBack: (() -> Unit)? = null) {
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedContainerColor = BColors.White,
-                    focusedContainerColor = BColors.White,
+                    unfocusedContainerColor = BColors.Surface,
+                    focusedContainerColor = BColors.Surface,
                     unfocusedBorderColor = BColors.Border,
                 ),
                 modifier = Modifier.fillMaxWidth(),
@@ -125,7 +125,7 @@ fun AppsScreen(onBack: (() -> Unit)? = null) {
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
-                    .background(BColors.White)
+                    .background(BColors.Surface)
                     .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
                     .clickable { showOthers = !showOthers }
                     .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -172,7 +172,7 @@ private fun LazyListScope.groupCard(key: String, title: String, rows: List<AppRo
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
-                    .background(BColors.White)
+                    .background(BColors.Surface)
                     .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
                     .padding(horizontal = 14.dp, vertical = 4.dp),
             ) {
@@ -217,13 +217,13 @@ private fun ToggleButton(watched: Boolean, label: String, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.Center,
     ) {
         if (watched) {
-            Icon(Icons.Rounded.Check, contentDescription = null, tint = BColors.VioletDark, modifier = Modifier.size(16.dp))
+            Icon(Icons.Rounded.Check, contentDescription = null, tint = BColors.Violet, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(4.dp))
         }
         Text(
             if (watched) "Added" else "Add",
             style = MaterialTheme.typography.titleSmall,
-            color = if (watched) BColors.VioletDark else BColors.White,
+            color = if (watched) BColors.Violet else BColors.Surface,
         )
     }
 }

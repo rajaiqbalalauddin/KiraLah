@@ -34,7 +34,14 @@ data class MonthCard(val period: String, val month: String, val year: Int, val t
 data class YearCard(val period: String, val year: Int, val totalText: String, val months: Int, val inProgress: Boolean)
 
 @Immutable
-data class RecapArchiveState(val loading: Boolean = true, val years: List<YearCard> = emptyList(), val months: List<MonthCard> = emptyList())
+data class RecapArchiveState(
+    val loading: Boolean = true,
+    val years: List<YearCard> = emptyList(),
+    /** Finished months only. */
+    val months: List<MonthCard> = emptyList(),
+    /** "September's recap unlocks on 1 October", or null when the current month has no spending yet. */
+    val lockedNote: String? = null,
+)
 
 /**
  * The archive grid. One grouped SQL query gives every month's total, so opening the tab never loads
@@ -56,11 +63,18 @@ class RecapArchiveViewModel(tx: TransactionRepository) : ViewModel() {
                 colorIndex = ym.monthValue % CARD_COLORS,
             )
         }
+        // The year banner still counts this month ("so far"), so it is built from every month.
         val years = months.groupBy { it.year }.map { (year, list) ->
             val total = rows.filter { it.ym.startsWith("$year-") }.sumOf { it.outSen }
             YearCard(year.toString(), year, Money.format(total), list.size, inProgress = year == now.year)
         }
-        RecapArchiveState(loading = false, years = years, months = months)
+        // A month's story only makes sense once the month is over, so the current month is held back.
+        val current = months.firstOrNull { it.inProgress }
+        val lockedNote = current?.let {
+            val next = now.plusMonths(1)
+            "${it.month}'s recap unlocks on 1 ${next.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)}"
+        }
+        RecapArchiveState(loading = false, years = years, months = months.filterNot { it.inProgress }, lockedNote = lockedNote)
     }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecapArchiveState())
@@ -118,7 +132,7 @@ class RecapStoryViewModel(private val tx: TransactionRepository, handle: SavedSt
                     amountSen = it.amountSen,
                     direction = if (it.direction == Direction.IN.name) Direction.IN else Direction.OUT,
                     merchant = it.merchant,
-                    category = runCatching { Category.valueOf(it.category) }.getOrDefault(Category.OTHER),
+                    category = it.category,
                     sourceLabel = it.sourceLabel,
                     timestamp = it.timestamp,
                 )

@@ -240,3 +240,71 @@ interface FriendDao {
     @Query("DELETE FROM friends WHERE id = :id")
     suspend fun delete(id: Long)
 }
+
+@Dao
+interface CustomCategoryDao {
+    /** Alphabetical, ignoring capitals, so the chip row and the Settings list are easy to scan. */
+    @Query("SELECT * FROM custom_categories ORDER BY name COLLATE NOCASE")
+    fun observeAll(): Flow<List<CustomCategoryEntity>>
+
+    @Insert
+    suspend fun insert(category: CustomCategoryEntity): Long
+
+    @Update
+    suspend fun update(category: CustomCategoryEntity)
+
+    @Query("DELETE FROM custom_categories WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    /**
+     * Moves every transaction off a category that is being deleted: money in becomes Income, money
+     * out becomes Other, which is what those rows would have been without the custom category.
+     */
+    @Query("UPDATE transactions SET category = CASE WHEN direction = 'IN' THEN 'INCOME' ELSE 'OTHER' END WHERE category = :key")
+    suspend fun reassign(key: String): Int
+
+    @Query("SELECT COUNT(*) FROM transactions WHERE category = :key")
+    suspend fun usageCount(key: String): Int
+}
+
+@Dao
+interface SpendingLimitDao {
+    /** Daily first, then weekly, then monthly, so the list reads from shortest window to longest. */
+    @Query(
+        "SELECT * FROM spending_limits ORDER BY CASE period WHEN 'DAY' THEN 0 WHEN 'WEEK' THEN 1 ELSE 2 END, " +
+            "CASE WHEN categoryKey = 'ALL' THEN 0 ELSE 1 END, createdAt",
+    )
+    fun observeAll(): Flow<List<SpendingLimitEntity>>
+
+    /** One-shot read for the checker, which runs in the listener where there is no UI to observe. */
+    @Query("SELECT * FROM spending_limits")
+    suspend fun all(): List<SpendingLimitEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(limit: SpendingLimitEntity): Long
+
+    @Query("DELETE FROM spending_limits WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    /** Limits on a custom category go with it, otherwise they would watch a category that no longer exists. */
+    @Query("DELETE FROM spending_limits WHERE categoryKey = :key")
+    suspend fun deleteForCategory(key: String)
+
+    /**
+     * Every counted payment out since [from], as small rows (category, amount, time). A month of
+     * these is a few hundred rows at most, and the same rows feed both the checker and the Limits
+     * screen, so both always agree on what has been spent.
+     */
+    @Query(
+        "SELECT category, amountSen, timestamp FROM transactions " +
+            "WHERE direction = 'OUT' AND isInternal = 0 AND timestamp >= :from",
+    )
+    suspend fun spendRows(from: Long): List<com.buyless.app.limits.SpendRow>
+
+    /** Same rows as [spendRows], re-emitted whenever transactions change, for the progress bars. */
+    @Query(
+        "SELECT category, amountSen, timestamp FROM transactions " +
+            "WHERE direction = 'OUT' AND isInternal = 0 AND timestamp >= :from",
+    )
+    fun observeSpendRows(from: Long): Flow<List<com.buyless.app.limits.SpendRow>>
+}

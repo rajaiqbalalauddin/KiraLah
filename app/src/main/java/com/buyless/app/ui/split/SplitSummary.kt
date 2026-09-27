@@ -135,11 +135,11 @@ internal fun SplitSummary(vm: SplitViewModel) {
             ) {
                 item {
                     Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(BColors.Ink).padding(20.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(BColors.Night).padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text("Friends owe you", style = MaterialTheme.typography.bodyMedium, color = BColors.VioletOnDark)
-                        Text(Money.format(owedToMe), style = MaterialTheme.typography.displaySmall, color = BColors.White)
+                        Text(Money.format(owedToMe), style = MaterialTheme.typography.displaySmall, color = BColors.OnColor)
                         Text(
                             "Collected ${Money.format(collected)} · Bill ${Money.format(vm.billTotalSen)}",
                             style = MaterialTheme.typography.bodyMedium,
@@ -228,7 +228,7 @@ private fun QrPicker(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(BColors.White)
+            .background(BColors.Surface)
             .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
             .padding(vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -247,11 +247,11 @@ private fun QrPicker(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Icon(Icons.Rounded.QrCode2, contentDescription = null, tint = if (chosen) BColors.White else BColors.Violet, modifier = Modifier.size(18.dp))
-                    Text(qr.label, style = MaterialTheme.typography.titleSmall, color = if (chosen) BColors.White else BColors.Ink)
+                    Icon(Icons.Rounded.QrCode2, contentDescription = null, tint = if (chosen) BColors.OnColor else BColors.Violet, modifier = Modifier.size(18.dp))
+                    Text(qr.label, style = MaterialTheme.typography.titleSmall, color = if (chosen) BColors.OnColor else BColors.Ink)
                     if (chosen) {
                         IconButton(onClick = { confirmDelete = qr.id }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Rounded.Close, contentDescription = "Remove ${qr.label}", tint = BColors.White, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Rounded.Close, contentDescription = "Remove ${qr.label}", tint = BColors.OnColor, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
@@ -304,7 +304,7 @@ private fun PersonTotalCard(person: Person, vm: SplitViewModel, total: Long, ext
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(BColors.White)
+            .background(BColors.Surface)
             .border(2.dp, if (isPaid) BColors.Green else BColors.Border, RoundedCornerShape(20.dp))
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -509,7 +509,7 @@ private fun PayCard(vm: SplitViewModel, totals: Map<Long, Long>, qrs: List<Payme
         }
 
         Column(
-            Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(28.dp)).background(BColors.White).padding(20.dp),
+            Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(28.dp)).background(BColors.Surface).padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
         ) {
@@ -527,7 +527,7 @@ private fun PayCard(vm: SplitViewModel, totals: Map<Long, Long>, qrs: List<Payme
                             Text(
                                 option.label,
                                 style = MaterialTheme.typography.titleSmall,
-                                color = if (chosen) BColors.White else BColors.Ink,
+                                color = if (chosen) BColors.Surface else BColors.Ink,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(18.dp))
                                     .background(if (chosen) BColors.Ink else BColors.Lavender)
@@ -544,7 +544,7 @@ private fun PayCard(vm: SplitViewModel, totals: Map<Long, Long>, qrs: List<Payme
             Button(
                 onClick = { vm.togglePaid(person.id) },
                 shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BColors.White, contentColor = BColors.Ink),
+                colors = ButtonDefaults.buttonColors(containerColor = BColors.Surface, contentColor = BColors.Ink),
                 modifier = Modifier.weight(1f).height(56.dp),
             ) {
                 Icon(if (isPaid) Icons.Rounded.CheckCircle else Icons.Rounded.Check, contentDescription = null, tint = if (isPaid) BColors.Green else BColors.Ink)
@@ -555,7 +555,7 @@ private fun PayCard(vm: SplitViewModel, totals: Map<Long, Long>, qrs: List<Payme
                 Button(
                     onClick = vm::nextToPay,
                     shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = BColors.Ink, contentColor = BColors.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = BColors.Ink, contentColor = BColors.Surface),
                     modifier = Modifier.weight(1f).height(56.dp),
                 ) {
                     Text("Next person")

@@ -17,7 +17,15 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  * Single entry point for reading and writing money records. Screens and the listener service never
  * touch DAOs directly, so rules like transfer matching and parser learning live in one place.
  */
-class TransactionRepository(private val db: BuylessDatabase) {
+class TransactionRepository(
+    private val db: BuylessDatabase,
+    /**
+     * Called after a new payment is saved (auto, Quick check or manual), outside the database
+     * transaction and after transfer pairing, so a move between your own apps is already marked
+     * internal. Used for spending-limit alerts; a failure here never undoes the save.
+     */
+    private val afterRecord: suspend (TransactionEntity) -> Unit = {},
+) {
 
     private val txDao = db.transactionDao()
     private val pendingDao = db.pendingDao()
@@ -52,10 +60,12 @@ class TransactionRepository(private val db: BuylessDatabase) {
 
     /** Auto-record a confident parse. A repeated notification hits the unique dedupKey and is dropped. */
     suspend fun recordAuto(draft: TransactionDraft, dedupKey: String) {
-        db.withTransaction {
+        val id = db.withTransaction {
             val id = txDao.insert(draft.toEntity(Origin.AUTO, dedupKey))
             if (id > 0 && !draft.isInternal) linkTransferPartner(id)
+            id
         }
+        afterInsert(id)
     }
 
     /** Queue a notification for Quick check. Returns false when it was already seen. */
@@ -68,15 +78,17 @@ class TransactionRepository(private val db: BuylessDatabase) {
      * correct guess and moves the app one step closer to automatic recording.
      */
     suspend fun savePending(pendingId: Long, draft: TransactionDraft) {
-        db.withTransaction {
-            val pending = pendingDao.getById(pendingId) ?: return@withTransaction
+        val id = db.withTransaction {
+            val pending = pendingDao.getById(pendingId) ?: return@withTransaction -1L
             val id = txDao.insert(draft.toEntity(Origin.REVIEWED, pending.dedupKey))
             pendingDao.setStatus(pendingId, PendingStatus.SAVED.name)
             val guessWasRight = pending.guessAmountSen == draft.amountSen &&
                 pending.guessDirection == draft.direction.name
             if (guessWasRight) appDao.incrementConfirmed(pending.sourcePackage)
             if (id > 0 && !draft.isInternal) linkTransferPartner(id)
+            id
         }
+        afterInsert(id)
     }
 
     suspend fun ignorePending(pendingId: Long) {
@@ -84,10 +96,19 @@ class TransactionRepository(private val db: BuylessDatabase) {
     }
 
     suspend fun addManual(draft: TransactionDraft) {
-        db.withTransaction {
+        val id = db.withTransaction {
             val id = txDao.insert(draft.toEntity(Origin.MANUAL, null))
             if (id > 0 && !draft.isInternal) linkTransferPartner(id)
+            id
         }
+        afterInsert(id)
+    }
+
+    /** Re-reads the saved row (pairing may have changed it) and passes it on. -1 = nothing was inserted. */
+    private suspend fun afterInsert(id: Long) {
+        if (id <= 0) return
+        val saved = txDao.getById(id) ?: return
+        runCatching { afterRecord(saved) }
     }
 
     /** Edit an existing row. Turning "internal" off also releases its partner so totals stay right. */
@@ -105,7 +126,7 @@ class TransactionRepository(private val db: BuylessDatabase) {
                     amountSen = draft.amountSen,
                     direction = draft.direction.name,
                     merchant = draft.merchant,
-                    category = if (draft.isInternal) Category.TRANSFER.name else draft.category.name,
+                    category = if (draft.isInternal) Category.TRANSFER.name else draft.category,
                     sourcePackage = draft.sourcePackage,
                     sourceLabel = draft.sourceLabel,
                     timestamp = draft.timestamp,
@@ -182,7 +203,7 @@ class TransactionRepository(private val db: BuylessDatabase) {
         amountSen = amountSen,
         direction = direction.name,
         merchant = merchant,
-        category = if (isInternal) Category.TRANSFER.name else category.name,
+        category = if (isInternal) Category.TRANSFER.name else category,
         sourcePackage = sourcePackage,
         sourceLabel = sourceLabel,
         timestamp = timestamp,

@@ -10,6 +10,7 @@ import com.buyless.app.ui.components.AppTileUi
 import com.buyless.app.ui.components.TxnUi
 import com.buyless.app.ui.components.kindOf
 import com.buyless.app.ui.components.toUi
+import com.buyless.app.util.AppPrefs
 import com.buyless.app.util.Dates
 import com.buyless.app.util.Money
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +39,8 @@ data class HomeUiState(
     val apps: List<AppTileUi> = emptyList(),
     /** Sum of all app balances that have been set, or null when none are set. */
     val totalBalanceText: String? = null,
+    /** True while the eye toggle hides balances. Balance texts are already masked when this is on. */
+    val balancesHidden: Boolean = false,
     val pendingCount: Int = 0,
     val recent: List<TxnUi> = emptyList(),
 )
@@ -51,7 +54,11 @@ class HomeViewModel(
     private val tx: TransactionRepository,
     private val apps: AppsRepository,
     private val month: MutableStateFlow<YearMonth>,
+    private val prefs: AppPrefs,
 ) : ViewModel() {
+
+    // Seeded from prefs so the first frame is already masked; declared before `state`, which reads it.
+    private val hideBalances = MutableStateFlow(prefs.hideBalances)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val state: StateFlow<HomeUiState> = month.flatMapLatest { ym ->
@@ -61,8 +68,11 @@ class HomeViewModel(
             tx.observeTotal(Direction.IN, from, to),
         ) { out, inn -> out to inn }
 
-        // Watched apps and their live balances travel together, since tiles need both.
-        val appsWithBalances = combine(apps.observeWatched(), apps.observeBalances()) { w, b -> w to b.associateBy { it.packageName } }
+        // Watched apps, their live balances and the hide flag travel together, since tiles need all three.
+        // The hide flag rides along here because combine() below already takes its maximum of five flows.
+        val appsWithBalances = combine(apps.observeWatched(), apps.observeBalances(), hideBalances) { w, b, h ->
+            Triple(w, b.associateBy { it.packageName }, h)
+        }
 
         combine(
             totals,
@@ -70,7 +80,7 @@ class HomeViewModel(
             appsWithBalances,
             tx.observeRecent(from, to, RECENT_LIMIT),
             tx.observeOpenPendingCount(),
-        ) { (out, inn), perApp, (watched, balances), recent, pending ->
+        ) { (out, inn), perApp, (watched, balances, hidden), recent, pending ->
             val spentByPkg = perApp.associateBy { it.sourcePackage }
             val today = LocalDate.now(Dates.zone)
             val left = inn - out
@@ -82,15 +92,14 @@ class HomeViewModel(
                 inText = Money.format(inn),
                 leftText = Money.format(left),
                 isOver = left < 0,
-                totalBalanceText = balances.values.takeIf { it.isNotEmpty() }?.sumOf { it.balanceSen }?.let { total ->
-                    (if (total < 0) "-" else "") + Money.format(total)
-                },
+                totalBalanceText = balances.values.takeIf { it.isNotEmpty() }?.sumOf { it.balanceSen }?.let { balanceText(it, hidden) },
+                balancesHidden = hidden,
                 apps = watched.map { app ->
                     val total = spentByPkg[app.packageName]
                     val balance = balances[app.packageName]?.balanceSen
                     AppTileUi(
                         balanceSen = balance,
-                        balanceText = balance?.let { (if (it < 0) "-" else "") + Money.format(it) },
+                        balanceText = balance?.let { balanceText(it, hidden) },
                         packageName = app.packageName,
                         label = app.label,
                         kind = kindOf(app.kind),
@@ -109,6 +118,18 @@ class HomeViewModel(
     }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
+
+    /** The padlock next to Recent. Same setting as the switch in Settings. */
+    fun toggleSwipeLock() {
+        prefs.swipeDeleteLocked = !prefs.swipeDeleteLocked
+    }
+
+    /** Flips the eye toggle and remembers it, so balances stay hidden after the app is closed. */
+    fun toggleHideBalances() {
+        val hide = !hideBalances.value
+        hideBalances.value = hide
+        prefs.hideBalances = hide
+    }
 
     /** Saves what the app shows now as its balance. No transaction is recorded. */
     fun setBalance(packageName: String, input: String) {
@@ -130,6 +151,11 @@ class HomeViewModel(
         viewModelScope.launch { tx.restore(entity) }
     }
 
+    /** Jumps back to the current month. Used when the Home tab is tapped again. */
+    fun thisMonth() {
+        month.value = YearMonth.now(Dates.zone)
+    }
+
     fun previousMonth() {
         month.value = month.value.minusMonths(1)
     }
@@ -140,5 +166,9 @@ class HomeViewModel(
 
     private companion object {
         const val RECENT_LIMIT = 5
+
+        /** One place that decides how a balance reads, so no tile or total can forget to mask it. */
+        fun balanceText(sen: Long, hidden: Boolean): String =
+            if (hidden) Money.MASKED else (if (sen < 0) "-" else "") + Money.format(sen)
     }
 }

@@ -113,7 +113,7 @@ fun SamplesScreen(onBack: () -> Unit) {
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
-                        .background(BColors.White)
+                        .background(BColors.Surface)
                         .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
                         .padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -154,7 +154,7 @@ fun SamplesScreen(onBack: () -> Unit) {
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(BColors.White)
+                        .background(BColors.Surface)
                         .border(1.dp, BColors.Border, RoundedCornerShape(16.dp))
                         .padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -205,10 +205,10 @@ private fun FilterText(label: String, selected: Boolean, onClick: () -> Unit) {
     Text(
         label,
         style = MaterialTheme.typography.titleSmall,
-        color = if (selected) BColors.White else BColors.Ink,
+        color = if (selected) BColors.Surface else BColors.Ink,
         modifier = Modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(if (selected) BColors.Ink else BColors.White)
+            .background(if (selected) BColors.Ink else BColors.Surface)
             .border(1.dp, if (selected) BColors.Ink else BColors.Border, RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),

@@ -1,6 +1,7 @@
 package com.buyless.app.recap
 
 import com.buyless.app.data.model.Category
+import com.buyless.app.data.model.CategoryKeys
 import com.buyless.app.data.model.Direction
 import java.time.DayOfWeek
 import java.time.Instant
@@ -14,7 +15,8 @@ data class RecapTx(
     val amountSen: Long,
     val direction: Direction,
     val merchant: String,
-    val category: Category,
+    /** Stored category key ("FOOD" or "custom:3"). */
+    val category: String,
     val sourceLabel: String,
     val timestamp: Long,
 )
@@ -31,7 +33,7 @@ data class RecapData(
     val inSen: Long,
     val payments: Int,
     val previousSpentSen: Long?,
-    val categories: List<Pair<Category, Long>>,
+    val categories: List<Pair<String, Long>>,
     val topMerchants: List<MerchantStat>,
     val biggest: RecapTx?,
     /** Spend per weekday, Monday first. */
@@ -128,17 +130,18 @@ object RecapBuilder {
     }
 
     /** A playful label from where the money went. Pure fun, based only on the top category's share. */
-    fun personality(spent: Long, income: Long, categories: List<Pair<Category, Long>>): Personality {
+    fun personality(spent: Long, income: Long, categories: List<Pair<String, Long>>): Personality {
         if (spent == 0L) return Personality("The Monk", "Not a single ringgit out. Legendary restraint.")
         if (income > spent * 2) return Personality("The Stacker", "Way more came in than went out. Your future self says thanks.")
         val (top, sen) = categories.first()
         val share = sen * 100 / spent
         return when {
             share < 30 -> Personality("The All-Rounder", "No single habit ran the show. Balanced, mostly.")
-            top == Category.FOOD -> Personality("The Foodie", "$share% of your spending went to food. Priorities, clearly.")
-            top == Category.TRANSPORT -> Personality("The Road Warrior", "$share% went to getting around. Tolls, fuel and rides add up.")
-            top == Category.SHOPPING -> Personality("The Cart Collector", "$share% went to shopping. Add to cart, then add to cart again.")
-            top == Category.BILLS -> Personality("The Responsible One", "$share% went to bills and subscriptions. Adulting, fully unlocked.")
+            top == Category.FOOD.name -> Personality("The Foodie", "$share% of your spending went to food. Priorities, clearly.")
+            top == Category.TRANSPORT.name -> Personality("The Road Warrior", "$share% went to getting around. Tolls, fuel and rides add up.")
+            top == Category.SHOPPING.name -> Personality("The Cart Collector", "$share% went to shopping. Add to cart, then add to cart again.")
+            top == Category.BILLS.name -> Personality("The Responsible One", "$share% went to bills and subscriptions. Adulting, fully unlocked.")
+            CategoryKeys.customId(top) != null -> Personality("The Specialist", "$share% went to a category you made yourself. You know your habits.")
             else -> Personality("The Wildcard", "$share% went to things that fit no box. Mysterious.")
         }
     }

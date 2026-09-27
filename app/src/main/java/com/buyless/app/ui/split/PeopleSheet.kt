@@ -105,7 +105,7 @@ internal fun PeopleSheet(vm: SplitViewModel, onDismiss: () -> Unit) {
         picked = if (f.id in picked) picked - f.id else picked + f.id
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = BColors.White) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = BColors.Surface) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Add people", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
@@ -265,12 +265,12 @@ private fun FavouriteChip(friend: FriendEntity, selected: Boolean, onBoard: Bool
         Box(contentAlignment = Alignment.Center) {
             Avatar(friend.asPerson(), 36.dp)
             if (selected || onBoard) {
-                Box(Modifier.size(36.dp).clip(CircleShape).background(BColors.Ink.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Check, contentDescription = null, tint = BColors.White, modifier = Modifier.size(20.dp))
+                Box(Modifier.size(36.dp).clip(CircleShape).background(BColors.Night.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.Check, contentDescription = null, tint = BColors.OnColor, modifier = Modifier.size(20.dp))
                 }
             }
         }
-        Text(friend.name, style = MaterialTheme.typography.titleSmall, color = if (selected) BColors.White else BColors.Ink, maxLines = 1)
+        Text(friend.name, style = MaterialTheme.typography.titleSmall, color = if (selected) BColors.OnColor else BColors.Ink, maxLines = 1)
         Icon(Icons.Rounded.Star, contentDescription = null, tint = BColors.Yellow, modifier = Modifier.size(16.dp))
     }
 }
@@ -289,7 +289,7 @@ private fun FriendRow(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(if (selected) BColors.VioletSoft else BColors.White)
+            .background(if (selected) BColors.VioletSoft else BColors.Surface)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -315,11 +315,11 @@ private fun FriendRow(
             Modifier
                 .size(26.dp)
                 .clip(CircleShape)
-                .background(if (selected || onBoard) BColors.Violet else BColors.White)
+                .background(if (selected || onBoard) BColors.Violet else BColors.Surface)
                 .border(2.dp, if (selected || onBoard) BColors.Violet else BColors.Border, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            if (selected || onBoard) Icon(Icons.Rounded.Check, contentDescription = null, tint = BColors.White, modifier = Modifier.size(16.dp))
+            if (selected || onBoard) Icon(Icons.Rounded.Check, contentDescription = null, tint = BColors.OnColor, modifier = Modifier.size(16.dp))
         }
     }
 }

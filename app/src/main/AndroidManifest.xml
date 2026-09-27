@@ -8,6 +8,9 @@
     <!-- Lets the app ask to be excluded from battery optimisation so the listener is not killed. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Android 13+ needs this to show spending limit alerts. Asked for when the first limit is saved. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Android 11+ hides other apps by default. Asking only for launcher apps is enough to find
          banking and e-wallet apps, without the broad QUERY_ALL_PACKAGES permission. -->
     <queries>

@@ -1,5 +1,9 @@
 package com.buyless.app.ui.activity
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -58,20 +62,32 @@ import com.buyless.app.ui.components.IconDot
 import com.buyless.app.ui.components.MonthSwitcher
 import com.buyless.app.ui.components.TransactionRow
 import com.buyless.app.ui.components.appViewModel
+import com.buyless.app.ui.limits.LimitsPanel
 import com.buyless.app.ui.theme.BColors
 
 /** Full list for the month, grouped by day, filterable by app and searchable by merchant. */
 @Composable
-fun ActivityScreen(onOpenTransaction: (Long) -> Unit) {
+fun ActivityScreen(onOpenTransaction: (Long) -> Unit, reselect: Flow<Unit> = emptyFlow()) {
     val vm = appViewModel { c, _ -> ActivityViewModel(c.transactions, c.apps, c.selectedMonth) }
     val state by vm.state.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
     var searching by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+
+    // Tapping Activity while on Activity: this month, no search, no app filter, back to the top.
+    LaunchedEffect(reselect) {
+        reselect.collect {
+            searching = false
+            vm.resetFilters()
+            listState.animateScrollToItem(0)
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -102,8 +118,8 @@ fun ActivityScreen(onOpenTransaction: (Long) -> Unit) {
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedContainerColor = BColors.White,
-                        focusedContainerColor = BColors.White,
+                        unfocusedContainerColor = BColors.Surface,
+                        focusedContainerColor = BColors.Surface,
                         unfocusedBorderColor = BColors.Border,
                     ),
                     modifier = Modifier.fillMaxWidth(),
@@ -118,11 +134,22 @@ fun ActivityScreen(onOpenTransaction: (Long) -> Unit) {
             }
         }
 
+        // Limits track the current day, week and month, so they sit above the app chips and are not filtered by them.
+        item(key = "limits") { LimitsPanel() }
+
         item(key = "chips") {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(state.chips, key = { it.packageName ?: "all" }) { chip ->
                     FilterPill(chip, onClick = { vm.selectApp(chip.packageName) })
                 }
+            }
+        }
+
+        // Charts sit under the app chips, so the filter visibly drives them too.
+        if (state.charts.hasSpending) {
+            item(key = "trend") { SpendTrendCard(state.charts) }
+            if (state.charts.categories.isNotEmpty()) {
+                item(key = "categories") { CategoryBreakdownCard(state.charts.categories) }
             }
         }
 
@@ -148,7 +175,7 @@ fun ActivityScreen(onOpenTransaction: (Long) -> Unit) {
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
-                        .background(BColors.White)
+                        .background(BColors.Surface)
                         .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
                         .padding(horizontal = 14.dp, vertical = 4.dp),
                 ) {
@@ -180,7 +207,7 @@ private fun SummaryCard(icon: ImageVector, bg: Color, fg: Color, label: String, 
     Row(
         modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(BColors.White)
+            .background(BColors.Surface)
             .border(1.dp, BColors.Border, RoundedCornerShape(16.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -196,8 +223,8 @@ private fun SummaryCard(icon: ImageVector, bg: Color, fg: Color, label: String, 
 
 @Composable
 private fun FilterPill(chip: FilterChipUi, onClick: () -> Unit) {
-    val bg = if (chip.selected) BColors.Ink else BColors.White
-    val fg = if (chip.selected) BColors.White else BColors.Ink
+    val bg = if (chip.selected) BColors.Ink else BColors.Surface
+    val fg = if (chip.selected) BColors.Surface else BColors.Ink
     Row(
         Modifier
             .height(40.dp)
@@ -212,7 +239,7 @@ private fun FilterPill(chip: FilterChipUi, onClick: () -> Unit) {
         if (chip.packageName != null && chip.kind != null) {
             AppBadge(chip.packageName, chip.kind, size = 28.dp)
         } else {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(if (chip.selected) BColors.White else BColors.Violet))
+            Box(Modifier.size(8.dp).clip(CircleShape).background(if (chip.selected) BColors.Surface else BColors.Violet))
         }
         Text(chip.label, style = MaterialTheme.typography.titleSmall, color = fg)
     }

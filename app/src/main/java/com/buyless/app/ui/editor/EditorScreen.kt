@@ -66,6 +66,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.buyless.app.data.model.Category
+import com.buyless.app.ui.categories.CategoryEditing
+import com.buyless.app.ui.categories.LocalCategoryCatalog
+import com.buyless.app.ui.categories.NEW_CATEGORY
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import com.buyless.app.data.model.Direction
 import com.buyless.app.ui.components.AppBadge
 import com.buyless.app.ui.components.EmptyState
@@ -76,10 +85,6 @@ import com.buyless.app.ui.theme.BColors
 import com.buyless.app.util.Dates
 import java.time.ZoneOffset
 
-private val pickableCategories = listOf(
-    Category.FOOD, Category.TRANSPORT, Category.SHOPPING, Category.BILLS, Category.INCOME, Category.OTHER,
-)
-
 /** Quick check, manual add and edit, all on one form. */
 @Composable
 fun EditorScreen(onClose: () -> Unit) {
@@ -88,6 +93,9 @@ fun EditorScreen(onClose: () -> Unit) {
     val openCount by vm.openCount.collectAsStateWithLifecycle()
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     var pickDate by rememberSaveable { mutableStateOf(false) }
+    val catalog = LocalCategoryCatalog.current
+    // Category being created (NEW_CATEGORY) or edited from a long press. null = sheet closed.
+    var editingCategory by rememberSaveable { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(vm.finished) { if (vm.finished) onClose() }
 
@@ -128,7 +136,7 @@ fun EditorScreen(onClose: () -> Unit) {
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
-                        .background(BColors.White)
+                        .background(BColors.Surface)
                         .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -190,12 +198,24 @@ fun EditorScreen(onClose: () -> Unit) {
                 if (!vm.isInternal) {
                     Label("Category")
                     ChipFlow {
-                        pickableCategories.forEach { cat ->
-                            val s = cat.style()
-                            SelectPill(s.label, selected = vm.category == cat, onClick = { vm.category = cat }) {
+                        catalog.pickable.forEach { option ->
+                            val s = catalog.style(option.key)
+                            CategoryPill(
+                                label = s.label,
+                                selected = vm.category == option.key,
+                                onClick = { vm.category = option.key },
+                                // Only your own categories can be changed; built-ins stay fixed.
+                                onLongClick = option.customId?.let { id -> { editingCategory = id } },
+                            ) {
                                 Icon(s.icon, contentDescription = null, tint = s.fg, modifier = Modifier.size(16.dp))
                             }
                         }
+                        CategoryPill(label = "New", selected = false, onClick = { editingCategory = NEW_CATEGORY }, onLongClick = null) {
+                            Icon(Icons.Rounded.Add, contentDescription = null, tint = BColors.Violet, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    if (catalog.custom.isNotEmpty()) {
+                        Text("Hold one of your categories to edit it.", style = MaterialTheme.typography.bodySmall, color = BColors.Muted)
                     }
                 }
 
@@ -283,6 +303,13 @@ fun EditorScreen(onClose: () -> Unit) {
         )
     }
 
+    CategoryEditing(
+        editingCategory,
+        onDone = { editingCategory = null },
+        onCreated = { key -> vm.category = key },
+        onDeleted = { key -> if (vm.category == key) vm.setDirectionAndFixCategory(vm.direction, resetTo = true) },
+    )
+
     if (pickDate) DatePick(vm.dateMillis, onDismiss = { pickDate = false }, onPick = { vm.setDate(it); pickDate = false })
 }
 
@@ -312,7 +339,7 @@ private fun FormCard(content: @Composable () -> Unit) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(BColors.White)
+            .background(BColors.Surface)
             .border(1.dp, BColors.Border, RoundedCornerShape(20.dp))
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -344,15 +371,39 @@ private fun DirectionButton(label: String, icon: ImageVector, selected: Boolean,
         modifier
             .height(48.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(if (selected) BColors.Ink else BColors.White)
+            .background(if (selected) BColors.Ink else BColors.Surface)
             .border(2.dp, if (selected) BColors.Ink else BColors.Border, RoundedCornerShape(14.dp))
             .toggleable(value = selected, role = Role.RadioButton, onValueChange = { onClick() }),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = if (selected) BColors.White else BColors.Ink, modifier = Modifier.size(16.dp))
+        Icon(icon, contentDescription = null, tint = if (selected) BColors.Surface else BColors.Ink, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(6.dp))
-        Text(label, style = MaterialTheme.typography.titleSmall, color = if (selected) BColors.White else BColors.Ink)
+        Text(label, style = MaterialTheme.typography.titleSmall, color = if (selected) BColors.Surface else BColors.Ink)
+    }
+}
+
+/**
+ * A category chip. Like SelectPill, but a long press opens the category for editing, which is how
+ * custom categories are changed without leaving the transaction.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CategoryPill(label: String, selected: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)?, leading: @Composable () -> Unit) {
+    Row(
+        Modifier
+            .height(40.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(BColors.Surface)
+            .border(2.dp, if (selected) BColors.Violet else BColors.Border, RoundedCornerShape(20.dp))
+            .semantics { this.selected = selected; role = Role.RadioButton }
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = if (onLongClick != null) "Edit $label" else null)
+            .padding(start = 10.dp, end = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        leading()
+        Text(label, style = MaterialTheme.typography.titleSmall)
     }
 }
 
@@ -362,7 +413,7 @@ private fun SelectPill(label: String, selected: Boolean, onClick: () -> Unit, le
         Modifier
             .height(40.dp)
             .clip(RoundedCornerShape(20.dp))
-            .background(BColors.White)
+            .background(BColors.Surface)
             .border(2.dp, if (selected) BColors.Violet else BColors.Border, RoundedCornerShape(20.dp))
             .toggleable(value = selected, role = Role.RadioButton, onValueChange = { onClick() })
             .padding(start = 10.dp, end = 14.dp),

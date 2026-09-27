@@ -21,7 +21,8 @@ data class TxnUi(
     val subtitle: String,
     val amountText: String,
     val tone: AmountTone,
-    val category: Category,
+    /** Stored category key ("FOOD" or "custom:3"). Resolved to an icon and colour at draw time. */
+    val category: String,
     val isInternal: Boolean,
 )
 
@@ -50,7 +51,7 @@ fun TransactionEntity.toUi(today: LocalDate): TxnUi {
             incoming -> AmountTone.IN
             else -> AmountTone.OUT
         },
-        category = runCatching { Category.valueOf(category) }.getOrDefault(Category.OTHER),
+        category = category,
         isInternal = isInternal,
     )
 }

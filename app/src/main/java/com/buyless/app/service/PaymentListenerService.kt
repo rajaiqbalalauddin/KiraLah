@@ -152,7 +152,7 @@ class PaymentListenerService : NotificationListenerService() {
                     amountSen = result.amountSen!!,
                     direction = result.direction!!,
                     merchant = result.merchant ?: app.label,
-                    category = result.category,
+                    category = result.category.name,
                     sourcePackage = app.packageName,
                     sourceLabel = app.label,
                     timestamp = at,

@@ -16,7 +16,7 @@ class RecapBuilderTest {
     private val zone = ZoneId.of("Asia/Kuala_Lumpur")
 
     private fun tx(sen: Long, merchant: String, cat: Category, day: Int, app: String = "MAE", dir: Direction = Direction.OUT) =
-        RecapTx(sen, dir, merchant, cat, app, LocalDateTime.of(2026, 9, day, 12, 0).atZone(zone).toInstant().toEpochMilli())
+        RecapTx(sen, dir, merchant, cat.name, app, LocalDateTime.of(2026, 9, day, 12, 0).atZone(zone).toInstant().toEpochMilli())
 
     private val txs = listOf(
         tx(1250, "Kedai Kopi Ali", Category.FOOD, 1), // Tuesday
@@ -49,7 +49,7 @@ class RecapBuilderTest {
     }
 
     @Test fun categoriesAndBiggest() {
-        assertEquals(Category.FOOD, recap.categories.first().first)
+        assertEquals(Category.FOOD.name, recap.categories.first().first)
         assertEquals(20650L, recap.biggest?.amountSen)
         assertEquals(DayOfWeek.SUNDAY, recap.busiestDay)
         assertEquals("BIMB", recap.apps.first().first)
@@ -58,6 +58,6 @@ class RecapBuilderTest {
     @Test fun personality() {
         assertTrue(recap.personality.title == "The Stacker")
         assertEquals("The Monk", RecapBuilder.personality(0, 0, emptyList()).title)
-        assertEquals("The Foodie", RecapBuilder.personality(1000, 0, listOf(Category.FOOD to 800L, Category.OTHER to 200L)).title)
+        assertEquals("The Foodie", RecapBuilder.personality(1000, 0, listOf(Category.FOOD.name to 800L, Category.OTHER.name to 200L)).title)
     }
 }

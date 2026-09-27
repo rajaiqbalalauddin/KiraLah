@@ -1,5 +1,7 @@
 package com.buyless.app.ui.setup
 
+import com.buyless.app.ui.theme.ThemeMode
+import com.buyless.app.ui.theme.ThemeState
 import android.app.Application
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
@@ -45,6 +47,16 @@ class SetupViewModel(
 
     private val permissions = MutableStateFlow(PermissionState())
     private val installed = MutableStateFlow<List<InstalledApp>?>(null)
+
+    /** Saves the night mode choice and applies it at once; ThemeState recolours the whole app. */
+    fun setThemeMode(mode: ThemeMode) {
+        prefs.themeMode = mode
+        ThemeState.mode = mode
+    }
+
+    fun setSwipeDeleteLocked(locked: Boolean) {
+        prefs.swipeDeleteLocked = locked
+    }
 
     init {
         refreshPermissions()

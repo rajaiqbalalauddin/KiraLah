@@ -1,4 +1,4 @@
-# Buyless
+# KiraLah
 
 <table>
   <tr>
@@ -20,6 +20,8 @@
 An Android app that records your spending automatically. It reads payment notifications from bank and
 e-wallet apps (MAE, Bank Islam, Touch 'n Go, plus any app you add), works out the amount and direction,
 and keeps everything on your phone.
+
+KiraLah was called Buyless early on, so the code still lives in the `com.buyless.app` package.
 
 ## Run it
 
@@ -49,7 +51,7 @@ are recorded straight away with the time printed in the alert (card alerts can a
 charge in a foreign currency (USD etc.) goes to Quick check, because the ringgit amount is not known yet.
 Promotions and updates are ignored. Templates live in `parser/BankProfiles.kt`.
 
-**Notification samples (listen first).** MAE, TNG and other apps have no templates yet. Buyless keeps
+**Notification samples (listen first).** MAE, TNG and other apps have no templates yet. KiraLah keeps
 the last 300 alerts from watched apps (never OTP / TAC) under Settings > Notification samples. Share the
 ones marked "Not recognised" (long numbers are masked) and turn them into a new profile in `BankProfiles`.
 
@@ -57,14 +59,66 @@ ones marked "Not recognised" (long numbers are masked) and turn them into a new 
 pre-filled. After 3 guesses you save without changes, that app is recorded automatically. Change
 `LEARNING_THRESHOLD` in `data/model/Models.kt` to adjust this.
 
-**App balances.** Tap an app tile on Home and type what that app shows right now. Buyless stores it as a
+**App balances.** Tap an app tile on Home and type what that app shows right now. KiraLah stores it as a
 starting point (no transaction is created) and keeps the balance live from alerts after that moment.
 Transfers between your own apps do move balances, even though they are not counted as spending.
+Tap the eye next to the total to hide every balance (shown as RM ••••). The choice is remembered
+after the app closes. Spending totals stay visible.
+
+**Tabs.** The five tabs sit in one `HorizontalPager` inside the `home` destination (`ui/nav/BuylessNavHost.kt`),
+so tapping a tab slides to it and you can swipe between them. Swipes that start on a transaction row still
+delete it. Tapping the tab you are already on resets it: Home and Activity go back to this month and the top
+(Activity also clears search and the app filter), Recap and Settings scroll up, and Split returns to the scan
+screen, asking first if a split is not finished yet.
+
+**Custom categories.** In the editor, the category row has a "New" chip. It opens a sheet to name the category,
+pick one of 10 colours and one of about 220 icons (grouped, with search: "kopi", "petrol", "kucing" all work). Hold a
+custom chip to edit or delete it; Settings > Categories lists them all. They live in the `custom_categories` table
+(migration 6 to 7). A transaction points at one by storing `custom:<id>` in its category column, next to built-in
+names like `FOOD`, so totals, the parser and older rows did not change (`CategoryKeys` in `data/model/Models.kt`).
+Deleting a category moves its transactions to Other (or Income for money in). Icons are saved by name, never by
+position, so the icon list in `ui/categories/CategoryIcons.kt` can grow safely. The notification parser still only
+guesses built-in categories.
+
+**Night mode.** Settings > Night mode: System, Light or Dark. Every `BColors` token reads the live palette
+(`ui/theme/Theme.kt`), so the whole app switches at once without screens knowing about it. `Surface` is the card
+colour (white by day), `OnColor` is always white for text on strong fills, and `Night` is always dark for surfaces
+that should stay dark (Recap cards, the receipt viewer). The WhatsApp pay card picture always stays light.
+
+**Activity charts.** Under the app chips, a Spending card shows a bar per day of the month or a bar per month for
+the last six (Days | Months toggle); tap a bar for its exact amount. "Where it went" lists the top five categories
+(the rest fold into Other). Both follow the app chip, not the search box. Built in `ActivityViewModel.buildCharts`
+from one six-month query and drawn on a Canvas in `ui/activity/SpendCharts.kt`.
+
+**Spending limits.** On the Activity tab, under the Out / In totals, tap **Add**. Pick how often (daily,
+weekly or monthly), a category (or all spending) and an amount. Each limit gets a card with a bar for the current
+day, week or month, whichever month Activity is showing, and the app filter does not change it. The bar turns
+amber at 80% and red once the limit is used up.
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/activity-limits.png" width="190" alt="Limits on the Activity tab"><br><sub>Limits on Activity</sub></td>
+    <td align="center"><img src="docs/screenshots/add-limit.png" width="190" alt="Adding a limit"><br><sub>Adding a limit</sub></td>
+    <td align="center"><img src="docs/screenshots/limit-alert.png" width="190" alt="Limit notifications"><br><sub>Reminders</sub></td>
+  </tr>
+</table>
+
+- The payment that uses up a limit, and every payment after it in the same period, posts a "limit reached"
+  notification. One heads-up is sent when a payment takes a limit past 80%.
+- One notification per payment, even when it trips several limits. Limits have their own notification channel,
+  so they can be muted on their own in Android settings.
+- Weeks run Monday to Sunday. Transfers between your own apps never count, and income cannot have a limit.
+- Android 13+ asks for notification permission when the first limit is saved. If notifications are off, the
+  Limits section shows a banner to turn them on.
+- The rules are in `limits/LimitMath.kt` (unit tested in `LimitCheckerTest`). `limits/LimitAlerts.kt` runs them after
+  every new payment out, through a hook in `TransactionRepository`. The UI is `ui/limits/LimitsPanel.kt`. Limits live
+  in the `spending_limits` table (migration 7 to 8) and are deleted along with their custom category.
 
 **Removing spending.** Swipe any transaction left in Activity or Recent to delete it, with Undo in the
 snackbar. If it was half of a transfer pair, Undo re-links the pair.
 
-**Recap tab.** A Spotify Wrapped style archive: a card per month plus one per year. Tapping one plays a
+**Recap tab.** A Spotify Wrapped style archive: a card per finished month plus one per year. The current month stays locked
+until it ends. Tapping one plays a
 full-screen story (tap right or left to move, hold to pause): total spent with a count-up, change vs the
 previous period, top categories, number one merchant, biggest payment, busiest weekday, top apps, a money
 personality, and a shareable summary. Month totals come from one grouped SQL query; transactions are only
@@ -107,14 +161,14 @@ saved payment QR (MAE, TNG, DuitNow...), with "Next person" to pass the phone ro
 **Friends and the people drawer.** Everyone you add to a bill is saved as a friend automatically
 (`friends` table, one row per name ignoring capitals). On the board, "Add" opens a drawer: favourites
 as one-tap chips on top, then everyone else ranked by how often you split with them. Tick several and
-add them at once, type a new name, or pick from your phone contacts (Android's own picker, so Buyless
+add them at once, type a new name, or pick from your phone contacts (Android's own picker, so KiraLah
 never needs the contacts permission). Star to favourite, hold a name to add a number, edit or forget it.
 Friends are filled once from older saved splits when you update.
 
-**WhatsApp.** On Totals, each friend's card has a WhatsApp button. Buyless draws a picture with their
+**WhatsApp.** On Totals, each friend's card has a WhatsApp button. KiraLah draws a picture with their
 amount and your payment QR (`share/PayCardRenderer.kt`), writes a short message with their items
 (`share/PayMessage.kt`), and opens that friend's chat with both attached. You tap Send. "Everyone" goes
-through all friends with a number: the next chat opens when you come back to Buyless. "Group chat" sends
+through all friends with a number: the next chat opens when you come back to KiraLah. "Group chat" sends
 one summary picture with everyone's amount and who has paid. Numbers like 012-345 6789 are turned into
 60123456789 automatically. No WhatsApp API is used, so it is free and sends from your own number.
 Opening a specific chat with a picture uses WhatsApp's undocumented `jid` extra; if that ever stops
@@ -159,6 +213,7 @@ app/src/main/java/com/buyless/app/
   data/model/              enums and TransactionDraft
   parser/                  NotificationParser
   service/                 PaymentListenerService
+  limits/                  spending limit rules (LimitMath), alerts and notifications
   split/                   ReceiptParser, SplitMath (pure Kotlin, unit tested), ReceiptScanner (ML Kit)
   ui/                      theme, shared components, one package per screen, navigation
   util/                    Money and date formatting, known Malaysian apps, system settings shortcuts
@@ -168,5 +223,5 @@ app/src/main/java/com/buyless/app/
 
 - Custom fonts. The design uses Bricolage Grotesque and Plus Jakarta Sans. Add the `.ttf` files to
   `res/font` and swap the two `FontFamily` values in `ui/theme/Theme.kt`.
-- Dark mode, budgets, charts, and a home screen widget (listed as open in the design brief).
+- Limit progress on Home, and a home screen widget (listed as open in the design brief).
 - Backup and export. Data is local only, and `allowBackup` is off on purpose.

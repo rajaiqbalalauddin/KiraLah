@@ -1,5 +1,11 @@
 package com.buyless.app.ui.split
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.material3.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.net.Uri
@@ -101,16 +107,61 @@ internal val PersonColors = listOf(
 )
 
 /** Soft fills for item blocks still on the table, so the board looks like a pile of sweets. */
-internal val BlockFills = listOf(
+internal val BlockFills: List<Color> get() = if (BColors.isDark) NightBlockFills else DayBlockFills
+
+private val DayBlockFills = listOf(
     Color(0xFFECE8FF), Color(0xFFFFE6DC), Color(0xFFDDEBFF), Color(0xFFFFF1D6), Color(0xFFD8F5EA), Color(0xFFFFE3EE),
+)
+
+/** Same hues as the day fills, darkened, so light text stays readable on them at night. */
+private val NightBlockFills = listOf(
+    Color(0xFF2E2757), Color(0xFF3D1F16), Color(0xFF16284A), Color(0xFF3A2A0E), Color(0xFF123A2F), Color(0xFF3F1A2A),
 )
 
 /** Entry point of the Split tab. Each step slides in from the side, so the flow feels like one journey. */
 @Composable
-fun SplitScreen() {
+fun SplitScreen(reselect: Flow<Unit> = emptyFlow(), isCurrentTab: Boolean = true) {
     val vm = appViewModel { c, _ -> SplitViewModel(c.receiptScanner, c.qrs, c.prefs, c.splitHistory, c.friends, c.payCards) }
-    BackHandler(enabled = vm.step != SplitStep.SCAN || vm.showingPayFor != null || vm.showingReceipt) { vm.back() }
+    // All tabs stay composed for smooth slides, so Back must only step through Split while Split is on screen.
+    BackHandler(enabled = isCurrentTab && (vm.step != SplitStep.SCAN || vm.showingPayFor != null || vm.showingReceipt)) { vm.back() }
     val snackbar = remember { SnackbarHostState() }
+
+    // Hoisted out of ScanStep so a reset can scroll it even while another step is showing.
+    val scanList = rememberLazyListState()
+    var confirmStartOver by remember { mutableStateOf(false) }
+
+    /** Back to a fresh scan screen at the top. */
+    fun startOver() {
+        vm.startOver()
+        scanList.requestScrollToItem(0)
+    }
+
+    // Tapping Split while on Split returns to the scan screen. A split is only saved once its totals
+    // are shown, so the checking and assigning steps ask first instead of silently dropping work.
+    LaunchedEffect(reselect) {
+        reselect.collect {
+            when (vm.step) {
+                SplitStep.SCAN -> if (!vm.scanning) scanList.animateScrollToItem(0)
+                SplitStep.ITEMS, SplitStep.BOARD -> confirmStartOver = true
+                SplitStep.SUMMARY -> startOver()
+            }
+        }
+    }
+
+    if (confirmStartOver) {
+        AlertDialog(
+            onDismissRequest = { confirmStartOver = false },
+            title = { Text("Start a new split?") },
+            text = { Text("This split isn't finished, so its items and people will be cleared.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmStartOver = false
+                    startOver()
+                }) { Text("Start over", color = BColors.Danger) }
+            },
+            dismissButton = { TextButton(onClick = { confirmStartOver = false }) { Text("Keep going") } },
+        )
+    }
 
     Box(Modifier.fillMaxSize()) {
     AnimatedContent(
@@ -123,7 +174,7 @@ fun SplitScreen() {
         label = "splitStep",
     ) { step ->
         when (step) {
-            SplitStep.SCAN -> ScanStep(vm, snackbar)
+            SplitStep.SCAN -> ScanStep(vm, snackbar, scanList)
             SplitStep.ITEMS -> ItemsStep(vm)
             SplitStep.BOARD -> SplitBoard(vm)
             SplitStep.SUMMARY -> SplitSummary(vm)
@@ -152,7 +203,7 @@ internal fun ReceiptButton(vm: SplitViewModel) {
 // ---------------- Step 1: scan ----------------
 
 @Composable
-private fun ScanStep(vm: SplitViewModel, snackbar: SnackbarHostState) {
+private fun ScanStep(vm: SplitViewModel, snackbar: SnackbarHostState, listState: LazyListState) {
     val history by vm.historyCards.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -174,6 +225,7 @@ private fun ScanStep(vm: SplitViewModel, snackbar: SnackbarHostState) {
     }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -198,7 +250,7 @@ private fun ScanStep(vm: SplitViewModel, snackbar: SnackbarHostState) {
                         ) { Text(listOf("A", "B", "C", "D")[i], color = fg, fontWeight = FontWeight.ExtraBold) }
                     }
                 }
-                Text("Split the bill, the fun way.", style = MaterialTheme.typography.headlineMedium, color = BColors.White)
+                Text("Split the bill, the fun way.", style = MaterialTheme.typography.headlineMedium, color = BColors.OnColor)
                 Text(
                     "Snap the receipt. Drag each item to whoever had it. Show your friends the QR to pay you.",
                     style = MaterialTheme.typography.bodyLarge,
@@ -278,6 +330,8 @@ private fun ScanStep(vm: SplitViewModel, snackbar: SnackbarHostState) {
             items(history, key = { "h" + it.id }) { card ->
                 SwipeToDelete(
                     surface = BColors.Lavender,
+                    // The swipe lock is for transactions only. Past splits always swipe, with Undo.
+                    locked = false,
                     onDelete = {
                         vm.deleteBill(card.id) { removed ->
                             scope.launch {
@@ -301,7 +355,7 @@ private fun HistoryRow(card: HistoryCard, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(BColors.White)
+            .background(BColors.Surface)
             .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
             .clickable(onClickLabel = "Open ${card.title}", onClick = onClick)
             .padding(12.dp),
@@ -432,7 +486,7 @@ private fun ChargesCard(vm: SplitViewModel) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(BColors.White)
+            .background(BColors.Surface)
             .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -578,8 +632,8 @@ internal fun BottomAction(label: String, enabled: Boolean, onClick: () -> Unit, 
 
 @Composable
 internal fun splitFieldColors() = OutlinedTextFieldDefaults.colors(
-    unfocusedContainerColor = BColors.White,
-    focusedContainerColor = BColors.White,
+    unfocusedContainerColor = BColors.Surface,
+    focusedContainerColor = BColors.Surface,
     unfocusedBorderColor = BColors.Border,
     focusedBorderColor = BColors.Violet,
 )

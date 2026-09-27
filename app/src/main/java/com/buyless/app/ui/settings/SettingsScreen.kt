@@ -1,5 +1,9 @@
 package com.buyless.app.ui.settings
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,17 +44,41 @@ import com.buyless.app.ui.components.appViewModel
 import com.buyless.app.ui.setup.PermissionSteps
 import com.buyless.app.ui.setup.SetupViewModel
 import com.buyless.app.ui.theme.BColors
+import com.buyless.app.ui.theme.ThemeMode
+import com.buyless.app.ui.theme.ThemeState
+import com.buyless.app.util.SwipeDeleteLock
+import androidx.compose.material.icons.rounded.SwipeLeft
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.icons.rounded.BrightnessAuto
+import androidx.compose.material.icons.rounded.Category
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.ui.semantics.Role
 
 /** Health check for tracking (are both permissions still on?) plus the privacy and learning notes. */
 @Composable
-fun SettingsScreen(onOpenApps: () -> Unit, onOpenSamples: () -> Unit) {
+fun SettingsScreen(
+    onOpenApps: () -> Unit,
+    onOpenSamples: () -> Unit,
+    onOpenCategories: () -> Unit,
+    reselect: Flow<Unit> = emptyFlow(),
+) {
     // Reuses the Setup logic for permission status, so both screens always agree.
     val vm = appViewModel { c, _ -> SetupViewModel(c.application, c.apps, c.prefs) }
     val state by vm.state.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshPermissions() }
     val watchedCount = state.apps.count { it.checked }
+    val listState = rememberLazyListState()
+
+    // Tapping Settings while on Settings: back to the top.
+    LaunchedEffect(reselect) { reselect.collect { listState.animateScrollToItem(0) } }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -73,7 +101,7 @@ fun SettingsScreen(onOpenApps: () -> Unit, onOpenSamples: () -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
-                    .background(BColors.White)
+                    .background(BColors.Surface)
                     .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
                     .clickable(onClick = onOpenApps)
                     .padding(14.dp),
@@ -98,7 +126,7 @@ fun SettingsScreen(onOpenApps: () -> Unit, onOpenSamples: () -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
-                    .background(BColors.White)
+                    .background(BColors.Surface)
                     .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
                     .clickable(onClick = onOpenSamples)
                     .padding(14.dp),
@@ -115,6 +143,46 @@ fun SettingsScreen(onOpenApps: () -> Unit, onOpenSamples: () -> Unit) {
                     )
                 }
                 Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = BColors.Muted)
+            }
+        }
+
+        item {
+            NavRow(
+                Icons.Rounded.Category, BColors.CoralSoft, BColors.CoralInk,
+                "Categories",
+                "Make your own, pick an icon and colour",
+                onOpenCategories,
+            )
+        }
+
+        item { AppearanceCard(ThemeState.mode, vm::setThemeMode) }
+
+        item {
+            // "Swipe to delete" on = unlocked. Worded as the action, so the switch reads naturally.
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(BColors.Surface)
+                    .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconDot(Icons.Rounded.SwipeLeft, BColors.CoralSoft, BColors.Danger, size = 40.dp, iconSize = 20.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Swipe to delete", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (SwipeDeleteLock.locked) "Locked. Open a transaction to delete it." else "Swipe a transaction left to delete it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BColors.Muted,
+                    )
+                }
+                Switch(
+                    checked = !SwipeDeleteLock.locked,
+                    onCheckedChange = { on -> vm.setSwipeDeleteLocked(!on) },
+                    colors = SwitchDefaults.colors(checkedTrackColor = BColors.Danger),
+                )
             }
         }
 
@@ -137,6 +205,80 @@ fun SettingsScreen(onOpenApps: () -> Unit, onOpenSamples: () -> Unit) {
         }
     }
 }
+
+/** Same look as the Watched apps row: icon, title, one line of detail, chevron. */
+@Composable
+private fun NavRow(icon: ImageVector, iconBg: Color, iconFg: Color, title: String, body: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(BColors.Surface)
+            .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconDot(icon, iconBg, iconFg, size = 40.dp, iconSize = 20.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(body, style = MaterialTheme.typography.bodySmall, color = BColors.Muted)
+        }
+        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = BColors.Muted)
+    }
+}
+
+/** Night mode: follow the phone, or force light or dark. Three segments, the current one filled. */
+@Composable
+private fun AppearanceCard(mode: ThemeMode, onPick: (ThemeMode) -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(BColors.Surface)
+            .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconDot(Icons.Rounded.DarkMode, BColors.VioletSoft, BColors.Violet, size = 40.dp, iconSize = 20.dp)
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text("Night mode", style = MaterialTheme.typography.titleMedium)
+                Text("Dark colours that are easier on the eyes at night", style = MaterialTheme.typography.bodySmall, color = BColors.Muted)
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(BColors.Lavender).padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            ThemeOptions.forEach { (option, label, icon) ->
+                val chosen = option == mode
+                Row(
+                    Modifier
+                        .weight(1f)
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (chosen) BColors.Surface else Color.Transparent)
+                        .selectable(selected = chosen, role = Role.RadioButton, onClick = { onPick(option) }),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(icon, contentDescription = null, tint = if (chosen) BColors.Violet else BColors.Muted, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(label, style = MaterialTheme.typography.titleSmall, color = if (chosen) BColors.Ink else BColors.Muted)
+                }
+            }
+        }
+    }
+}
+
+private val ThemeOptions = listOf(
+    Triple(ThemeMode.SYSTEM, "System", Icons.Rounded.BrightnessAuto),
+    Triple(ThemeMode.LIGHT, "Light", Icons.Rounded.LightMode),
+    Triple(ThemeMode.DARK, "Dark", Icons.Rounded.DarkMode),
+)
 
 @Composable
 private fun InfoCard(icon: ImageVector, bg: Color, tint: Color, textColor: Color, title: String, body: String) {

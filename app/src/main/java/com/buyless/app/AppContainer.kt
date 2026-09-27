@@ -4,11 +4,15 @@ import android.app.Application
 import android.content.Context
 import com.buyless.app.data.db.BuylessDatabase
 import com.buyless.app.data.repo.AppsRepository
+import com.buyless.app.data.repo.CategoryRepository
 import com.buyless.app.data.repo.FriendsRepository
+import com.buyless.app.data.repo.LimitRepository
 import com.buyless.app.data.repo.QrRepository
 import com.buyless.app.data.repo.SampleRepository
 import com.buyless.app.data.repo.SplitHistoryRepository
 import com.buyless.app.data.repo.TransactionRepository
+import com.buyless.app.limits.LimitAlerts
+import com.buyless.app.limits.LimitNotifier
 import com.buyless.app.share.PayCardFiles
 import com.buyless.app.split.ReceiptScanner
 import com.buyless.app.util.AppPrefs
@@ -31,9 +35,13 @@ class AppContainer(val application: Application) {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val database: BuylessDatabase by lazy { BuylessDatabase.build(appContext) }
-    val transactions: TransactionRepository by lazy { TransactionRepository(database) }
+    val transactions: TransactionRepository by lazy { TransactionRepository(database) { limitAlerts.onSpent(it) } }
+    val limits: LimitRepository by lazy { LimitRepository(database.spendingLimitDao()) }
+    val limitNotifier: LimitNotifier by lazy { LimitNotifier(appContext) }
+    val limitAlerts: LimitAlerts by lazy { LimitAlerts(limits, database.customCategoryDao(), limitNotifier) }
     val apps: AppsRepository by lazy { AppsRepository(appContext, database.watchedAppDao()) }
     val prefs: AppPrefs by lazy { AppPrefs(appContext) }
+    val categories: CategoryRepository by lazy { CategoryRepository(database) }
     val samples: SampleRepository by lazy { SampleRepository(database.rawNotificationDao()) }
     val splitHistory: SplitHistoryRepository by lazy { SplitHistoryRepository(appContext, database.splitBillDao()) }
     val friends: FriendsRepository by lazy { FriendsRepository(database.friendDao(), database.splitBillDao()) }

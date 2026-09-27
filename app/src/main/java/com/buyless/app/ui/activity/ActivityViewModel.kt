@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.buyless.app.data.model.AppKind
+import com.buyless.app.data.model.Category
 import com.buyless.app.data.model.Direction
 import com.buyless.app.data.repo.AppsRepository
 import com.buyless.app.data.repo.TransactionRepository
@@ -28,12 +29,43 @@ import kotlinx.coroutines.launch
 import com.buyless.app.data.db.TransactionEntity
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+private const val TREND_MONTHS = 6
+private const val TOP_CATEGORIES = 5
+private val DAY_DETAIL = DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)
+private val MONTH_SHORT = DateTimeFormatter.ofPattern("MMM", Locale.ENGLISH)
+private val MONTH_DETAIL = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
 
 @Immutable
 data class FilterChipUi(val packageName: String?, val label: String, val kind: AppKind?, val selected: Boolean)
 
 @Immutable
 data class DaySection(val epochDay: Long, val label: String, val totalText: String, val items: List<TxnUi>)
+
+/** One bar in a spending chart. detail is what the tooltip line says when the bar is tapped. */
+@Immutable
+data class ChartBar(val label: String, val sen: Long, val detail: String, val isCurrent: Boolean)
+
+/** One row of "Where it went": a category key and its share of the month's spending. */
+@Immutable
+data class CategoryShare(val key: String, val sen: Long, val amountText: String, val percent: Int, val fraction: Float)
+
+/**
+ * Everything the Activity charts draw. Built in the ViewModel (off the main thread) so the
+ * charts only paint, and they follow the app filter chips like the list does.
+ */
+@Immutable
+data class SpendCharts(
+    val days: List<ChartBar> = emptyList(),
+    val dayAverageText: String = "",
+    val months: List<ChartBar> = emptyList(),
+    val monthAverageText: String = "",
+    val categories: List<CategoryShare> = emptyList(),
+) {
+    val hasSpending: Boolean get() = months.any { it.sen > 0 }
+}
 
 @Immutable
 data class ActivityUiState(
@@ -45,6 +77,7 @@ data class ActivityUiState(
     val chips: List<FilterChipUi> = emptyList(),
     val sections: List<DaySection> = emptyList(),
     val hasFilter: Boolean = false,
+    val charts: SpendCharts = SpendCharts(),
 )
 
 /**
@@ -64,16 +97,20 @@ class ActivityViewModel(
 
     @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
     val state: StateFlow<ActivityUiState> = combine(
+        // One query covers the chart's six months; the list below only uses the selected month.
         month.flatMapLatest { ym ->
-            val (from, to) = Dates.monthRange(ym)
+            val from = Dates.monthRange(ym.minusMonths(TREND_MONTHS - 1L)).first
+            val to = Dates.monthRange(ym).second
             tx.observeRange(from, to)
         },
         apps.observeWatched(),
         selectedApp,
         _query.debounce(200),
         month,
-    ) { rows, watched, selected, query, ym ->
+    ) { trendRows, watched, selected, query, ym ->
         val today = LocalDate.now(Dates.zone)
+        val (monthFrom, monthTo) = Dates.monthRange(ym)
+        val rows = trendRows.filter { it.timestamp in monthFrom until monthTo }
         val q = query.trim()
         val filtered = rows.filter { row ->
             (selected == null || row.sourcePackage == selected) &&
@@ -117,10 +154,91 @@ class ActivityViewModel(
             chips = chips,
             sections = sections,
             hasFilter = selected != null || q.isNotEmpty(),
+            // Charts follow the app chip but not the search box: search is for finding rows, not for totals.
+            charts = buildCharts(trendRows.filter { selected == null || it.sourcePackage == selected }, ym, today),
         )
     }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ActivityUiState())
+
+    /**
+     * Spending (money out, own transfers excluded) per day of the selected month, per month for the
+     * last six months, and per category for the selected month.
+     */
+    private fun buildCharts(rows: List<TransactionEntity>, ym: YearMonth, today: LocalDate): SpendCharts {
+        val spend = rows.filter { !it.isInternal && it.direction == Direction.OUT.name }
+
+        // Days: every day of the month gets a slot, so a bar's position is its date.
+        val byDay = LongArray(ym.lengthOfMonth())
+        val byMonth = HashMap<YearMonth, Long>()
+        val byCategory = HashMap<String, Long>()
+        for (r in spend) {
+            val date = Dates.toDate(r.timestamp)
+            val rowMonth = YearMonth.from(date)
+            byMonth[rowMonth] = (byMonth[rowMonth] ?: 0L) + r.amountSen
+            if (rowMonth == ym) {
+                byDay[date.dayOfMonth - 1] += r.amountSen
+                byCategory[r.category] = (byCategory[r.category] ?: 0L) + r.amountSen
+            }
+        }
+        val days = byDay.mapIndexed { i, sen ->
+            val date = ym.atDay(i + 1)
+            ChartBar(
+                label = (i + 1).toString(),
+                sen = sen,
+                detail = "${date.format(DAY_DETAIL)}: ${Money.format(sen)}",
+                isCurrent = date == today,
+            )
+        }
+        // Average over days that have happened, so a young month is not diluted by empty future days.
+        val daysSoFar = when {
+            ym == YearMonth.from(today) -> today.dayOfMonth
+            ym.isAfter(YearMonth.from(today)) -> 0
+            else -> ym.lengthOfMonth()
+        }.coerceAtLeast(1)
+        val monthTotal = byDay.sum()
+
+        val months = (TREND_MONTHS - 1 downTo 0).map { back ->
+            val m = ym.minusMonths(back.toLong())
+            val sen = byMonth[m] ?: 0L
+            ChartBar(
+                label = m.format(MONTH_SHORT),
+                sen = sen,
+                detail = "${m.format(MONTH_DETAIL)}: ${Money.format(sen)}",
+                isCurrent = m == ym,
+            )
+        }
+
+        val sortedCategories = byCategory.entries.sortedByDescending { it.value }
+        val top = sortedCategories.take(TOP_CATEGORIES).map { it.key to it.value }
+        val rest = sortedCategories.drop(TOP_CATEGORIES).sumOf { it.value }
+        // Anything past the top five folds into Other, so the list never grows past six rows.
+        val merged = if (rest > 0) {
+            val other = Category.OTHER.name
+            val otherSen = (top.firstOrNull { it.first == other }?.second ?: 0L) + rest
+            top.filterNot { it.first == other } + (other to otherSen)
+        } else {
+            top
+        }
+        val biggest = merged.maxOfOrNull { it.second }?.coerceAtLeast(1) ?: 1
+        val categories = merged.sortedByDescending { it.second }.map { (key, sen) ->
+            CategoryShare(
+                key = key,
+                sen = sen,
+                amountText = Money.format(sen),
+                percent = if (monthTotal > 0) ((sen * 100 + monthTotal / 2) / monthTotal).toInt() else 0,
+                fraction = sen.toFloat() / biggest,
+            )
+        }
+
+        return SpendCharts(
+            days = days,
+            dayAverageText = "${Money.format(monthTotal / daysSoFar)} a day on average",
+            months = months,
+            monthAverageText = "${Money.format(months.sumOf { it.sen } / TREND_MONTHS)} a month on average",
+            categories = categories,
+        )
+    }
 
     /** Swipe delete. Hands the removed row back so the screen can offer Undo. */
     fun delete(id: Long, onDeleted: (TransactionEntity) -> Unit) {
@@ -137,6 +255,13 @@ class ActivityViewModel(
 
     fun setQuery(value: String) {
         _query.value = value
+    }
+
+    /** The tab's default view: this month, every app, no search. Used when Activity is tapped again. */
+    fun resetFilters() {
+        selectedApp.value = null
+        _query.value = ""
+        month.value = YearMonth.now(Dates.zone)
     }
 
     fun previousMonth() {

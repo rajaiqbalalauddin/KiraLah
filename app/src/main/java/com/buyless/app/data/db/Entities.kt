@@ -153,3 +153,35 @@ data class FriendEntity(
     val lastSplitAt: Long = 0,
     val createdAt: Long,
 )
+
+/**
+ * A spending category the user made themselves ("Kucing", "Tuition"). Transactions point at it by
+ * storing "custom:<id>" in their category column, next to built-in names like "FOOD", so no
+ * existing row or query had to change shape. iconKey names an icon in CategoryIcons; colorIndex
+ * picks one of the category colour pairs.
+ */
+@Entity(tableName = "custom_categories")
+data class CustomCategoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val iconKey: String,
+    val colorIndex: Int,
+    val createdAt: Long,
+)
+
+/**
+ * A spending limit: at most amountSen per period (DAY, WEEK, MONTH) for one category, or for all
+ * spending when categoryKey is ALL_CATEGORIES. Unique on (categoryKey, period), so there is only
+ * ever one "Monthly Food" limit and the checker never has to pick between two.
+ */
+@Entity(
+    tableName = "spending_limits",
+    indices = [Index(value = ["categoryKey", "period"], unique = true)],
+)
+data class SpendingLimitEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val period: String,
+    val categoryKey: String,
+    val amountSen: Long,
+    val createdAt: Long,
+)

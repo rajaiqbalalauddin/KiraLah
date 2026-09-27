@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ always shows a system splash on cold start. Making it the KiraLah purple with the
+         banknote at the same size means the Compose intro (ui/intro) continues from it seamlessly.
+         Every item from values/themes.xml is repeated because this file replaces that style. -->
+    <style name="Theme.Buyless" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/lavender</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowSplashScreenBackground">@color/kiralah_purple</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+    </style>
+</resources>

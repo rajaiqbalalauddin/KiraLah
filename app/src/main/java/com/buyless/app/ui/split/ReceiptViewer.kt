@@ -56,7 +56,7 @@ internal fun ReceiptViewer(path: String, title: String, onClose: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(BColors.Ink)
+            .background(BColors.Night)
             // Swallow taps so nothing underneath reacts while the viewer is open.
             .pointerInput(Unit) { detectTapGestures { } },
     ) {
@@ -95,16 +95,16 @@ internal fun ReceiptViewer(path: String, title: String, onClose: () -> Unit) {
             )
         }
         Row(
-            Modifier.fillMaxWidth().background(BColors.Ink.copy(alpha = 0.7f)).padding(horizontal = 8.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().background(BColors.Night.copy(alpha = 0.7f)).padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Rounded.ReceiptLong, contentDescription = null, tint = BColors.Yellow, modifier = Modifier.padding(start = 8.dp).size(20.dp))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, color = BColors.White, style = MaterialTheme.typography.titleMedium)
+                Text(title, color = BColors.OnColor, style = MaterialTheme.typography.titleMedium)
                 Text("Pinch to zoom, double-tap to reset", color = BColors.VioletOnDark, style = MaterialTheme.typography.bodySmall)
             }
-            IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, contentDescription = "Close receipt", tint = BColors.White) }
+            IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, contentDescription = "Close receipt", tint = BColors.OnColor) }
         }
     }
 }

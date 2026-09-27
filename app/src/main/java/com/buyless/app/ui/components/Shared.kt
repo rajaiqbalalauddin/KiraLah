@@ -50,7 +50,7 @@ fun MonthSwitcher(label: String, canGoNext: Boolean, onPrev: () -> Unit, onNext:
     Row(
         Modifier
             .clip(RoundedCornerShape(22.dp))
-            .background(BColors.White)
+            .background(BColors.Surface)
             .border(1.dp, BColors.Border, RoundedCornerShape(22.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {

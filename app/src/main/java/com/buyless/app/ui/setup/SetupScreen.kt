@@ -90,7 +90,7 @@ fun SetupScreen(onDone: () -> Unit, onAddApp: () -> Unit) {
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
-                        .background(BColors.White)
+                        .background(BColors.Surface)
                         .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
                         .padding(horizontal = 14.dp, vertical = 4.dp),
                 ) {

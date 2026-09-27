@@ -1,5 +1,9 @@
 package com.buyless.app.ui.recap
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -30,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -61,11 +66,16 @@ internal val RecapColors = listOf(
 
 /** The Recap tab: this year's banner, then every month with data, newest first. */
 @Composable
-fun RecapScreen(onOpen: (String) -> Unit) {
+fun RecapScreen(onOpen: (String) -> Unit, reselect: Flow<Unit> = emptyFlow()) {
     val vm = appViewModel { c, _ -> RecapArchiveViewModel(c.transactions) }
     val state by vm.state.collectAsStateWithLifecycle()
+    val gridState = rememberLazyGridState()
+
+    // Tapping Recap while on Recap: back to the newest cards at the top.
+    LaunchedEffect(reselect) { reselect.collect { gridState.animateScrollToItem(0) } }
 
     LazyVerticalGrid(
+        state = gridState,
         columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp),
@@ -81,7 +91,20 @@ fun RecapScreen(onOpen: (String) -> Unit) {
 
         if (!state.loading && state.months.isEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                EmptyState(Icons.Rounded.AutoAwesome, "Nothing to recap yet", "Once payments are recorded, each month gets its own story here.")
+                EmptyState(Icons.Rounded.AutoAwesome, "Nothing to recap yet", "Each month gets its own story here once the month is over.")
+            }
+        }
+
+        state.lockedNote?.let { note ->
+            item(key = "locked", span = { GridItemSpan(maxLineSpan) }) {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(BColors.VioletSoft).padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(Icons.Rounded.Lock, contentDescription = null, tint = BColors.Violet, modifier = Modifier.size(18.dp))
+                    Text(note, style = MaterialTheme.typography.titleSmall, color = BColors.Violet)
+                }
             }
         }
 
@@ -103,7 +126,7 @@ private fun YearBanner(year: YearCard, onClick: () -> Unit) {
             .fillMaxWidth()
             .aspectRatio(1.9f)
             .clip(RoundedCornerShape(26.dp))
-            .background(BColors.Ink)
+            .background(BColors.Night)
             .clickable(onClickLabel = "Play your ${year.year} recap", onClick = onClick),
     ) {
         Canvas(Modifier.fillMaxSize()) {
@@ -113,14 +136,14 @@ private fun YearBanner(year: YearCard, onClick: () -> Unit) {
         }
         Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Pill(if (year.inProgress) "So far" else "Full year", BColors.White.copy(alpha = 0.16f), BColors.White)
+                Pill(if (year.inProgress) "So far" else "Full year", BColors.OnColor.copy(alpha = 0.16f), BColors.OnColor)
             }
             Column {
-                Text("Your ${year.year}", color = BColors.White, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
+                Text("Your ${year.year}", color = BColors.OnColor, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
                 Text("${year.totalText} across ${year.months} month${if (year.months == 1) "" else "s"}", color = BColors.VioletOnDark, style = MaterialTheme.typography.bodyMedium)
             }
         }
-        PlayDot(Modifier.align(Alignment.BottomEnd).padding(18.dp), BColors.White, BColors.Ink)
+        PlayDot(Modifier.align(Alignment.BottomEnd).padding(18.dp), BColors.OnColor, BColors.Night)
     }
 }
 

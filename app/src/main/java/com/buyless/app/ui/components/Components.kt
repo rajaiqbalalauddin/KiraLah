@@ -55,6 +55,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.buyless.app.data.model.AppKind
 import com.buyless.app.data.model.Category
+import com.buyless.app.util.SwipeDeleteLock
+import com.buyless.app.ui.categories.LocalCategoryCatalog
 import com.buyless.app.data.repo.AppsRepository
 import com.buyless.app.ui.theme.BColors
 
@@ -78,8 +80,14 @@ fun Category.style(): CategoryStyle = when (this) {
 }
 
 @Composable
-fun CategoryBadge(category: Category, size: Dp = 42.dp) {
-    val s = category.style()
+fun CategoryBadge(category: Category, size: Dp = 42.dp) = CategoryBadge(category.style(), size)
+
+/** Badge for a stored key, built-in or custom, looked up in the live catalog. */
+@Composable
+fun CategoryBadge(key: String, size: Dp = 42.dp) = CategoryBadge(LocalCategoryCatalog.current.style(key), size)
+
+@Composable
+fun CategoryBadge(s: CategoryStyle, size: Dp = 42.dp) {
     Box(
         modifier = Modifier.size(size).clip(RoundedCornerShape(size / 3)).background(s.bg),
         contentAlignment = Alignment.Center,
@@ -125,7 +133,7 @@ fun BCard(
     Box(
         modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(BColors.White)
+            .background(BColors.Surface)
             .border(1.dp, BColors.Border, RoundedCornerShape(18.dp)),
     ) { content() }
 }
@@ -176,7 +184,7 @@ fun TransactionRow(item: TxnUi, onClick: () -> Unit, modifier: Modifier = Modifi
                     AmountTone.NEUTRAL -> BColors.Faint
                 },
             )
-            if (item.isInternal) Pill("Not counted", BColors.VioletSoft, BColors.VioletDark)
+            if (item.isInternal) Pill("Not counted", BColors.VioletSoft, BColors.Violet)
         }
     }
 }
@@ -219,7 +227,18 @@ fun EmptyState(icon: ImageVector, title: String, body: String, modifier: Modifie
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SwipeToDelete(onDelete: () -> Unit, surface: Color = BColors.White, content: @Composable () -> Unit) {
+fun SwipeToDelete(
+    onDelete: () -> Unit,
+    surface: Color = BColors.Surface,
+    locked: Boolean = SwipeDeleteLock.locked,
+    content: @Composable () -> Unit,
+) {
+    // Locked: a plain row. No swipe gesture at all, so a sideways swipe on a row changes tab instead.
+    // Deleting still works from inside the transaction.
+    if (locked) {
+        Box(Modifier.background(surface)) { content() }
+        return
+    }
     val latest by rememberUpdatedState(onDelete)
     val state = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
@@ -241,9 +260,9 @@ fun SwipeToDelete(onDelete: () -> Unit, surface: Color = BColors.White, content:
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Delete", style = MaterialTheme.typography.titleSmall, color = BColors.White)
+                Text("Delete", style = MaterialTheme.typography.titleSmall, color = BColors.OnColor)
                 Spacer(Modifier.width(8.dp))
-                Icon(Icons.Rounded.DeleteOutline, contentDescription = null, tint = BColors.White)
+                Icon(Icons.Rounded.DeleteOutline, contentDescription = null, tint = BColors.OnColor)
             }
         },
     ) {

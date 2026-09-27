@@ -14,6 +14,12 @@ import java.util.Locale
  */
 object Money {
 
+    /**
+     * Stands in for a balance while balances are hidden. Always the same width, so the length of
+     * the real number (RM 9.00 vs RM 9,000.00) does not give it away.
+     */
+    const val MASKED = "RM \u2022\u2022\u2022\u2022"
+
     fun format(sen: Long): String {
         val abs = kotlin.math.abs(sen)
         val ringgit = abs / 100

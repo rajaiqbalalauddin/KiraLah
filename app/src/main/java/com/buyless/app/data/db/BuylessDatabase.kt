@@ -12,8 +12,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * WAL journaling lets the listener write while the UI reads without blocking each other.
  */
 @Database(
-    entities = [TransactionEntity::class, WatchedAppEntity::class, PendingEntity::class, PaymentQrEntity::class, RawNotificationEntity::class, SplitBillEntity::class, FriendEntity::class],
-    version = 6,
+    entities = [TransactionEntity::class, WatchedAppEntity::class, PendingEntity::class, PaymentQrEntity::class, RawNotificationEntity::class, SplitBillEntity::class, FriendEntity::class, CustomCategoryEntity::class, SpendingLimitEntity::class],
+    version = 8,
     exportSchema = false,
 )
 abstract class BuylessDatabase : RoomDatabase() {
@@ -24,12 +24,14 @@ abstract class BuylessDatabase : RoomDatabase() {
     abstract fun rawNotificationDao(): RawNotificationDao
     abstract fun splitBillDao(): SplitBillDao
     abstract fun friendDao(): FriendDao
+    abstract fun customCategoryDao(): CustomCategoryDao
+    abstract fun spendingLimitDao(): SpendingLimitDao
 
     companion object {
         fun build(context: Context): BuylessDatabase =
             Room.databaseBuilder(context, BuylessDatabase::class.java, "buyless.db")
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .build()
 
         /** v2 adds saved payment QRs for bill splitting. Existing transactions are untouched. */
@@ -88,6 +90,32 @@ abstract class BuylessDatabase : RoomDatabase() {
                         "`timesSplit` INTEGER NOT NULL, `lastSplitAt` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL)",
                 )
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_friends_nameKey` ON `friends` (`nameKey`)")
+            }
+        }
+
+        /** v7 adds categories the user creates. Transactions already store category as text, so they are untouched. */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `custom_categories` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `iconKey` TEXT NOT NULL, " +
+                        "`colorIndex` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL)",
+                )
+            }
+        }
+
+        /** v8 adds spending limits (daily, weekly, monthly; one category or all). Nothing else changes. */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `spending_limits` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `period` TEXT NOT NULL, " +
+                        "`categoryKey` TEXT NOT NULL, `amountSen` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_spending_limits_categoryKey_period` " +
+                        "ON `spending_limits` (`categoryKey`, `period`)",
+                )
             }
         }
     }

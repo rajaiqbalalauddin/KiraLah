@@ -84,7 +84,7 @@ private fun StepCard(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(BColors.White)
+            .background(BColors.Surface)
             .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -102,12 +102,12 @@ private fun StepCard(
                 Modifier.size(28.dp).clip(CircleShape).background(BColors.Green),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Rounded.Check, contentDescription = "Done", tint = BColors.White, modifier = Modifier.size(16.dp))
+                Icon(Icons.Rounded.Check, contentDescription = "Done", tint = BColors.OnColor, modifier = Modifier.size(16.dp))
             }
         } else {
             Button(
                 onClick = onAllow,
-                colors = ButtonDefaults.buttonColors(containerColor = BColors.Ink, contentColor = BColors.White),
+                colors = ButtonDefaults.buttonColors(containerColor = BColors.Ink, contentColor = BColors.Surface),
             ) { Text("Allow") }
         }
     }

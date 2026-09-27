@@ -91,12 +91,12 @@ internal fun ScanningView(stage: ScanStage, photo: Uri?, onCancel: () -> Unit) {
     val float by t.animateFloat(-1f, 1f, infiniteRepeatable(tween(2400, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "float")
 
     Column(
-        Modifier.fillMaxSize().background(BColors.Ink).padding(24.dp),
+        Modifier.fillMaxSize().background(BColors.Night).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         Spacer(Modifier.height(8.dp))
-        Text("Reading your receipt", style = MaterialTheme.typography.headlineSmall, color = BColors.White)
+        Text("Reading your receipt", style = MaterialTheme.typography.headlineSmall, color = BColors.OnColor)
 
         // The receipt card, gently floating.
         Box(
@@ -113,7 +113,7 @@ internal fun ScanningView(stage: ScanStage, photo: Uri?, onCancel: () -> Unit) {
                 Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(22.dp))
-                    .background(BColors.White),
+                    .background(BColors.Surface),
             ) {
                 BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).background(BColors.Lavender)) {
                     val image = thumb
@@ -123,7 +123,7 @@ internal fun ScanningView(stage: ScanStage, photo: Uri?, onCancel: () -> Unit) {
                         Icon(Icons.Rounded.ReceiptLong, contentDescription = null, tint = BColors.VioletSoft, modifier = Modifier.size(96.dp).align(Alignment.Center))
                     }
                     // Dim the photo slightly so the beam reads clearly.
-                    Box(Modifier.fillMaxSize().background(BColors.Ink.copy(alpha = 0.18f)))
+                    Box(Modifier.fillMaxSize().background(BColors.Night.copy(alpha = 0.18f)))
 
                     // Glow beam: a soft band plus a bright line, moved by the draw phase only.
                     val h = maxHeight
@@ -235,7 +235,7 @@ private fun StageList(stage: ScanStage) {
                         text,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = if (s == 1) FontWeight.Bold else FontWeight.Normal,
-                        color = if (s == 0) BColors.Faint else BColors.White,
+                        color = if (s == 0) BColors.Faint else BColors.OnColor,
                         textAlign = TextAlign.Start,
                         modifier = if (s == 1) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier,
                     )
@@ -250,7 +250,7 @@ private fun StageList(stage: ScanStage) {
 private fun StepDot(state: Int) {
     when (state) {
         2 -> Box(Modifier.size(24.dp).clip(CircleShape).background(BColors.Green), contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.Check, contentDescription = null, tint = BColors.White, modifier = Modifier.size(14.dp))
+            Icon(Icons.Rounded.Check, contentDescription = null, tint = BColors.OnColor, modifier = Modifier.size(14.dp))
         }
         1 -> {
             val spin = rememberInfiniteTransition(label = "spin")

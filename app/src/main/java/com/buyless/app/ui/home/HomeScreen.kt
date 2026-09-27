@@ -1,10 +1,20 @@
 package com.buyless.app.ui.home
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.buyless.app.ui.components.KiraLahMark
 import com.buyless.app.ui.components.KiraLahWordmark
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.key
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -28,6 +38,11 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.NotificationsNone
 import androidx.compose.material.icons.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.SouthWest
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.LockOpen
+import com.buyless.app.util.SwipeDeleteLock
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -84,21 +99,38 @@ fun HomeScreen(
     onOpenTransaction: (Long) -> Unit,
     onAddManual: () -> Unit,
     onAddApp: () -> Unit,
+    reselect: Flow<Unit> = emptyFlow(),
 ) {
-    val vm = appViewModel { c, _ -> HomeViewModel(c.transactions, c.apps, c.selectedMonth) }
+    val vm = appViewModel { c, _ -> HomeViewModel(c.transactions, c.apps, c.selectedMonth, c.prefs) }
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var editingBalance by rememberSaveable { mutableStateOf<String?>(null) }
+    val listState = rememberLazyListState()
+    val appsScroll = rememberScrollState()
+
+    // Tapping Home while on Home: back to this month and the top of the page.
+    LaunchedEffect(reselect) {
+        reselect.collect {
+            vm.thisMonth()
+            listState.animateScrollToItem(0)
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
+            state = listState,
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item(key = "header", contentType = "header") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    KiraLahWordmark(style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                    // Logo tile + wordmark read as one brand lockup, so they share the weighted slot.
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        KiraLahMark(size = 32.dp)
+                        Spacer(Modifier.width(8.dp))
+                        KiraLahWordmark(style = MaterialTheme.typography.headlineSmall)
+                    }
                     MonthSwitcher(state.monthName, state.canGoNext, vm::previousMonth, vm::nextMonth)
                     Spacer(Modifier.width(4.dp))
                     IconButton(onClick = onOpenReview) {
@@ -117,13 +149,32 @@ fun HomeScreen(
                         val total = state.totalBalanceText
                         if (total != null) {
                             Text("Total $total", style = MaterialTheme.typography.titleSmall, color = BColors.Violet)
+                            // Eye toggle: only shown once there is a balance worth hiding.
+                            IconButton(onClick = vm::toggleHideBalances) {
+                                Icon(
+                                    if (state.balancesHidden) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                    contentDescription = if (state.balancesHidden) "Show balances" else "Hide balances",
+                                    tint = BColors.Violet,
+                                )
+                            }
                         } else {
                             Text("Tap an app to set its balance", style = MaterialTheme.typography.bodySmall, color = BColors.Muted)
                         }
                     }
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(state.apps, key = { it.packageName }) { tile -> AppTile(tile, onClick = { editingBalance = tile.packageName }) }
-                        item(key = "add") { AddAppTile(onAddApp) }
+                    // A plain scrolling Row, not a LazyRow. A LazyRow only measures the tiles on screen, so
+                    // its height changed whenever a taller tile (or Add app) scrolled in, and that pushed
+                    // Recent and See all down mid-scroll. There are only a handful of apps, so laying them
+                    // all out is cheap, and IntrinsicSize.Max makes every tile as tall as the tallest one.
+                    Row(
+                        Modifier.horizontalScroll(appsScroll).height(IntrinsicSize.Max),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        state.apps.forEach { tile ->
+                            key(tile.packageName) {
+                                AppTile(tile, Modifier.fillMaxHeight(), onClick = { editingBalance = tile.packageName })
+                            }
+                        }
+                        AddAppTile(Modifier.fillMaxHeight(), onAddApp)
                     }
                 }
             }
@@ -134,6 +185,16 @@ fun HomeScreen(
 
             item(key = "recentHeader", contentType = "header") {
                 SectionHeader("Recent") {
+                    // Padlock for swipe-to-delete. Locked is grey; unlocked is red, as a reminder that a swipe deletes.
+                    val locked = SwipeDeleteLock.locked
+                    IconButton(onClick = vm::toggleSwipeLock, modifier = Modifier.size(40.dp)) {
+                        Icon(
+                            if (locked) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
+                            contentDescription = if (locked) "Unlock swipe to delete" else "Lock swipe to delete",
+                            tint = if (locked) BColors.Muted else BColors.Danger,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                     TextButton(onClick = onOpenActivity) { Text("See all") }
                 }
             }
@@ -170,7 +231,7 @@ fun HomeScreen(
         FloatingActionButton(
             onClick = onAddManual,
             containerColor = BColors.Ink,
-            contentColor = BColors.White,
+            contentColor = BColors.Surface,
             shape = RoundedCornerShape(18.dp),
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
         ) {
@@ -209,7 +270,7 @@ private fun HeroCard(state: HomeUiState) {
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Spent in ${state.monthName}", style = MaterialTheme.typography.bodyMedium, color = BColors.VioletOnDark)
-            Text(state.spentText, style = MaterialTheme.typography.displaySmall, color = BColors.White)
+            Text(state.spentText, style = MaterialTheme.typography.displaySmall, color = BColors.OnColor)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             HeroStat(Icons.Rounded.SouthWest, BColors.Green, "Money in", state.inText, Modifier.weight(1f))
@@ -231,22 +292,22 @@ private fun HeroStat(icon: ImageVector, iconTint: Color, label: String, value: S
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        IconDot(icon, BColors.White, iconTint, size = 30.dp, iconSize = 16.dp)
+        IconDot(icon, BColors.OnColor, iconTint, size = 30.dp, iconSize = 16.dp)
         Column {
             Text(label, style = MaterialTheme.typography.bodySmall, color = BColors.VioletOnDark)
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BColors.White, maxLines = 1)
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BColors.OnColor, maxLines = 1)
         }
     }
 }
 
 /** App tile: balance first (what you have), then this month's spending. Tap to set the balance. */
 @Composable
-private fun AppTile(tile: AppTileUi, onClick: () -> Unit) {
+private fun AppTile(tile: AppTileUi, modifier: Modifier, onClick: () -> Unit) {
     Column(
-        Modifier
+        modifier
             .width(136.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(BColors.White)
+            .background(BColors.Surface)
             .border(1.dp, BColors.Border, RoundedCornerShape(18.dp))
             .clickable(onClickLabel = "Set ${tile.label} balance", onClick = onClick)
             .padding(12.dp),
@@ -303,9 +364,9 @@ private fun BalanceDialog(tile: AppTileUi, onDismiss: () -> Unit, onSave: (Strin
 }
 
 @Composable
-private fun AddAppTile(onClick: () -> Unit) {
+private fun AddAppTile(modifier: Modifier, onClick: () -> Unit) {
     Column(
-        Modifier
+        modifier
             .width(128.dp)
             .heightIn(min = 128.dp)
             .clip(RoundedCornerShape(18.dp))

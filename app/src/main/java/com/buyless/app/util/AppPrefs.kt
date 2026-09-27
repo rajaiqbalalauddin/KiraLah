@@ -1,6 +1,10 @@
 package com.buyless.app.util
 
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.buyless.app.ui.theme.ThemeMode
 
 /**
  * Tiny key-value store for app flags. SharedPreferences is used on purpose: it is read once into
@@ -28,10 +32,46 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_QRS_CROPPED, false)
         set(value) = prefs.edit().putBoolean(KEY_QRS_CROPPED, value).apply()
 
+    /**
+     * Masks app balances on Home, for when someone can see your screen. Stored here rather than
+     * in Room because it is a display choice, not data, and must be ready before the first frame.
+     */
+    var hideBalances: Boolean
+        get() = prefs.getBoolean(KEY_HIDE_BALANCES, false)
+        set(value) = prefs.edit().putBoolean(KEY_HIDE_BALANCES, value).apply()
+
+    /** System, Light or Dark. Read before the first frame so the app never flashes the wrong colours. */
+    var themeMode: ThemeMode
+        get() = prefs.getString(KEY_THEME, null)?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM
+        set(value) = prefs.edit().putString(KEY_THEME, value.name).apply()
+
+    /**
+     * Swipe-to-delete lock. On by default: a stray swipe on Home was deleting entries. Writing here
+     * also updates SwipeDeleteLock, so every list and both switches change at once.
+     */
+    var swipeDeleteLocked: Boolean
+        get() = prefs.getBoolean(KEY_SWIPE_LOCK, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_SWIPE_LOCK, value).apply()
+            SwipeDeleteLock.locked = value
+        }
+
     private companion object {
+        const val KEY_SWIPE_LOCK = "swipe_delete_locked"
+        const val KEY_THEME = "theme_mode"
+        const val KEY_HIDE_BALANCES = "hide_balances"
         const val KEY_QRS_CROPPED = "qrs_cropped"
         const val KEY_SAMPLES = "collect_samples"
         const val KEY_ONBOARDING = "onboarding_done"
         const val KEY_LAST_QR = "last_qr_id"
     }
+}
+
+/**
+ * Live copy of the swipe-to-delete lock as snapshot state, so SwipeToDelete rows recompose the
+ * moment it changes. Seeded from AppPrefs in MainActivity; change it through AppPrefs so it persists.
+ */
+object SwipeDeleteLock {
+    var locked by mutableStateOf(true)
+        internal set
 }

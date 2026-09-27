@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.buyless.app.data.model.AppKind
 import com.buyless.app.data.model.Category
+import com.buyless.app.data.model.CategoryKeys
 import com.buyless.app.data.model.Direction
 import com.buyless.app.data.model.MANUAL_SOURCE
 import com.buyless.app.data.model.TransactionDraft
@@ -68,7 +69,8 @@ class EditorViewModel(
     var amountText by mutableStateOf("")
     var direction by mutableStateOf(Direction.OUT)
     var merchant by mutableStateOf("")
-    var category by mutableStateOf(Category.FOOD)
+    /** Category key: a built-in name ("FOOD") or a custom one ("custom:3"). See CategoryKeys. */
+    var category by mutableStateOf(Category.FOOD.name)
     var sourcePackage by mutableStateOf(MANUAL_SOURCE)
     var isInternal by mutableStateOf(false)
     var dateMillis by mutableLongStateOf(System.currentTimeMillis())
@@ -126,8 +128,8 @@ class EditorViewModel(
         amountText = p.guessAmountSen?.let(Money::toInput) ?: ""
         direction = p.guessDirection?.let { runCatching { Direction.valueOf(it) }.getOrNull() } ?: Direction.OUT
         merchant = p.guessMerchant ?: ""
-        category = p.guessCategory?.let { runCatching { Category.valueOf(it) }.getOrNull() }
-            ?: if (direction == Direction.IN) Category.INCOME else Category.OTHER
+        category = p.guessCategory?.takeIf { CategoryKeys.builtIn(it) != null }
+            ?: if (direction == Direction.IN) Category.INCOME.name else Category.OTHER.name
         sourcePackage = p.sourcePackage
         dateMillis = p.postedAt
         isInternal = false
@@ -143,7 +145,7 @@ class EditorViewModel(
         amountText = Money.toInput(t.amountSen)
         direction = Direction.valueOf(t.direction)
         merchant = t.merchant
-        category = runCatching { Category.valueOf(t.category) }.getOrDefault(Category.OTHER)
+        category = t.category
         sourcePackage = t.sourcePackage
         sourceLabels = sourceLabels + (t.sourcePackage to t.sourceLabel)
         isInternal = t.isInternal
@@ -151,11 +153,18 @@ class EditorViewModel(
         raw = t.rawText?.let { RawNotification(t.sourcePackage, t.sourceLabel, AppKind.WALLET, Dates.fullDate(t.timestamp), it) }
     }
 
-    fun setDirectionAndFixCategory(value: Direction) {
+    /** resetTo = true picks the default for the direction, used when the chosen category was just deleted. */
+    fun setDirectionAndFixCategory(value: Direction, resetTo: Boolean = false) {
         direction = value
+        if (resetTo) {
+            category = if (value == Direction.IN) Category.INCOME.name else Category.OTHER.name
+            return
+        }
         // Keep the category sensible when flipping direction, without overriding a deliberate choice.
-        if (value == Direction.IN && category != Category.INCOME && category != Category.TRANSFER) category = Category.INCOME
-        if (value == Direction.OUT && category == Category.INCOME) category = Category.OTHER
+        if (value == Direction.IN && CategoryKeys.builtIn(category) != null && category != Category.INCOME.name && category != Category.TRANSFER.name) {
+            category = Category.INCOME.name
+        }
+        if (value == Direction.OUT && category == Category.INCOME.name) category = Category.OTHER.name
     }
 
     /** Keeps the time of day when only the date changes, so ordering within a day stays right. */
