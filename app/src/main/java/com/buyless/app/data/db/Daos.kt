@@ -58,13 +58,16 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE isInternal = 0 AND timestamp >= :from AND timestamp < :to ORDER BY timestamp")
     suspend fun countedInRange(from: Long, to: Long): List<TransactionEntity>
 
-    /** Month-by-month spending for the Recap archive, grouped by local calendar month in SQL. */
+    /**
+     * Day-by-day spending for the Recap archive, grouped by local day in SQL. A year is at most 365
+     * small rows, and Kotlin folds them into months using the user's month start day.
+     */
     @Query(
-        "SELECT strftime('%Y-%m', timestamp / 1000, 'unixepoch', 'localtime') AS ym, " +
+        "SELECT strftime('%Y-%m-%d', timestamp / 1000, 'unixepoch', 'localtime') AS day, " +
             "COALESCE(SUM(CASE WHEN direction = 'OUT' THEN amountSen ELSE 0 END), 0) AS outSen, COUNT(*) AS count " +
-            "FROM transactions WHERE isInternal = 0 GROUP BY ym ORDER BY ym DESC",
+            "FROM transactions WHERE isInternal = 0 GROUP BY day ORDER BY day DESC",
     )
-    fun observeMonths(): Flow<List<MonthSummary>>
+    fun observeDays(): Flow<List<DaySummary>>
 
     /**
      * Finds the other half of a transfer between the user's own apps: same amount, opposite

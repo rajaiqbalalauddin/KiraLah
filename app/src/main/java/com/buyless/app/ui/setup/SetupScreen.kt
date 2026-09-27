@@ -81,7 +81,7 @@ fun SetupScreen(onDone: () -> Unit, onAddApp: () -> Unit) {
             }
         }
 
-        item(key = "permissions") { PermissionSteps(state.permissions) }
+        item(key = "permissions") { PermissionSteps(state.permissions, onRefresh = vm::refreshPermissions) }
 
         item(key = "apps") {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

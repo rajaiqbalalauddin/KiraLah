@@ -88,4 +88,15 @@ class LimitCheckerTest {
         val hits = check(listOf(dailyAll, monthlyFood), earlier, row(500, "FOOD", at(3, hour = 13)))
         assertEquals(listOf(LimitPeriod.MONTH, LimitPeriod.DAY), hits.map { it.status.limit.period })
     }
+
+    @Test fun monthlyLimitFollowsMonthStartDay() {
+        // Start day 25: 20 Sep belongs to the August period, so it does not count towards 25 Sep onwards.
+        val earlier = listOf(row(9_000, "FOOD", at(20)))
+        val tx = row(2_000, "FOOD", at(26))
+        assertTrue(LimitChecker.check(listOf(monthlyFood), earlier + tx, tx, tx.timestamp, zone, monthStartDay = 25).isEmpty())
+        // With calendar months the same payments are over the limit.
+        assertEquals(LimitAlert.REACHED, LimitChecker.check(listOf(monthlyFood), earlier + tx, tx, tx.timestamp, zone).single().alert)
+        assertEquals(at(25, hour = 0), LimitPeriods.window(LimitPeriod.MONTH, at(26), zone, 25).from)
+        assertEquals(at(25, hour = 0, month = 10), LimitPeriods.window(LimitPeriod.MONTH, at(26), zone, 25).to)
+    }
 }

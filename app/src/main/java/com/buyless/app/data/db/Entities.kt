@@ -80,8 +80,11 @@ data class PendingEntity(
 /** Live balance of one app, worked out in SQL from the starting balance plus later transactions. */
 data class AppBalance(val packageName: String, val balanceSen: Long)
 
-/** One month in the Recap archive. ym is "2026-09". */
-data class MonthSummary(val ym: String, val outSen: Long, val count: Int)
+/**
+ * Spending on one local day ("2026-09-25"). Recap folds these into months in Kotlin, because a month
+ * can start on any day the user picks, which a plain GROUP BY month cannot express.
+ */
+data class DaySummary(val day: String, val outSen: Long, val count: Int)
 
 /** Result row of the per-app spending query. */
 data class AppTotal(

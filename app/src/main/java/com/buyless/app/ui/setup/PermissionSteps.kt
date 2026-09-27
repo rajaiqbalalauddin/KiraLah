@@ -24,7 +24,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.platform.LocalWindowInfo
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filter
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,8 +50,12 @@ import com.buyless.app.util.SystemAccess
  * Each step shows a tick when done, or a button that jumps straight to the right system page.
  */
 @Composable
-fun PermissionSteps(permissions: PermissionState) {
+fun PermissionSteps(permissions: PermissionState, onRefresh: () -> Unit) {
     val context = LocalContext.current
+    RefreshOnReturn(onRefresh)
+    // The battery prompt is a small system dialog over our screen. Launching it for a result gives a
+    // callback the moment it closes, instead of relying on ON_RESUME, which some phones never send for it.
+    val batteryPrompt = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { onRefresh() }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         StepCard(
             icon = Icons.Rounded.NotificationsActive,
@@ -65,7 +79,13 @@ fun PermissionSteps(permissions: PermissionState) {
             title = "Keep running",
             body = "Stops your phone from closing KiraLah in the background. Recommended.",
             done = permissions.batteryExempt,
-            onAllow = { context.launch(SystemAccess.batteryExemptionIntent(context)) },
+            onAllow = {
+                try {
+                    batteryPrompt.launch(SystemAccess.batteryExemptionIntent(context))
+                } catch (e: ActivityNotFoundException) {
+                    context.launch(SystemAccess.appInfoIntent(context))
+                }
+            },
         )
     }
 }
@@ -110,6 +130,28 @@ private fun StepCard(
                 colors = ButtonDefaults.buttonColors(containerColor = BColors.Ink, contentColor = BColors.Surface),
             ) { Text("Allow") }
         }
+    }
+}
+
+/**
+ * Re-checks permissions whenever our window gets focus back, which also happens when a system dialog
+ * closes without pausing the app. The later re-checks cover phones that save the "Allow" a moment
+ * after the dialog is gone; without them the step kept showing Allow after it was granted.
+ */
+@Composable
+private fun RefreshOnReturn(onRefresh: () -> Unit) {
+    val windowInfo = LocalWindowInfo.current
+    val refresh by rememberUpdatedState(onRefresh)
+    LaunchedEffect(windowInfo) {
+        snapshotFlow { windowInfo.isWindowFocused }
+            .filter { it }
+            .collectLatest {
+                refresh()
+                delay(600)
+                refresh()
+                delay(1_500)
+                refresh()
+            }
     }
 }
 

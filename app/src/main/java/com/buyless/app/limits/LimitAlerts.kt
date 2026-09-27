@@ -7,6 +7,7 @@ import com.buyless.app.data.model.CategoryKeys
 import com.buyless.app.data.model.Direction
 import com.buyless.app.data.repo.LimitRepository
 import com.buyless.app.util.Dates
+import com.buyless.app.util.MonthStart
 import kotlinx.coroutines.flow.first
 
 /**
@@ -25,8 +26,9 @@ class LimitAlerts(
         val all = limits.all()
         if (all.isEmpty()) return // the common case costs one tiny query
         val zone = Dates.zone
-        val rows = limits.spendRows(LimitPeriods.earliestStart(now, zone))
-        val hits = LimitChecker.check(all, rows, SpendRow(tx.category, tx.amountSen, tx.timestamp), now, zone)
+        val startDay = MonthStart.value
+        val rows = limits.spendRows(LimitPeriods.earliestStart(now, zone, startDay))
+        val hits = LimitChecker.check(all, rows, SpendRow(tx.category, tx.amountSen, tx.timestamp), now, zone, startDay)
         if (hits.isEmpty()) return
         val custom = customCategories.observeAll().first().associate { CategoryKeys.custom(it.id) to it.name }
         notifier.post(tx.id, tx.merchant, tx.amountSen, hits) { key -> labelOf(key, custom) }

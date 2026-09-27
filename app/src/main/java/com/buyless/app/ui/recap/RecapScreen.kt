@@ -166,6 +166,7 @@ private fun MonthTile(card: MonthCard, onClick: () -> Unit) {
             Column {
                 Text(card.year.toString(), color = fg.copy(alpha = 0.8f), style = MaterialTheme.typography.labelMedium)
                 Text(card.month, color = fg, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 26.sp)
+                card.rangeText?.let { Text(it, color = fg.copy(alpha = 0.8f), style = MaterialTheme.typography.labelMedium) }
             }
             Column {
                 if (card.inProgress) Pill("In progress", fg.copy(alpha = 0.18f), fg)

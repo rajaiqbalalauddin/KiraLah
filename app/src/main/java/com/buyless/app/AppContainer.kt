@@ -16,11 +16,14 @@ import com.buyless.app.limits.LimitNotifier
 import com.buyless.app.share.PayCardFiles
 import com.buyless.app.split.ReceiptScanner
 import com.buyless.app.util.AppPrefs
-import java.time.YearMonth
+import com.buyless.app.util.Dates
+import com.buyless.app.util.MonthPeriods
+import com.buyless.app.util.MonthStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
@@ -49,8 +52,21 @@ class AppContainer(val application: Application) {
     val qrs: QrRepository by lazy { QrRepository(appContext, database.paymentQrDao()) }
     val receiptScanner: ReceiptScanner by lazy { ReceiptScanner(appContext, BuildConfig.GEMINI_API_KEY) }
 
-    /** Month being viewed. Shared so Home and Activity always show the same month. */
-    val selectedMonth = MutableStateFlow(YearMonth.now())
+    // The month start day must be known before anything works out "this month", including the line below.
+    init {
+        MonthStart.set(prefs.monthStartDay)
+    }
+
+    /**
+     * Month being viewed, as the period that starts in it (see MonthPeriods). Shared so Home and
+     * Activity always show the same month.
+     */
+    val selectedMonth = MutableStateFlow(MonthPeriods.current(Dates.zone, MonthStart.value))
+
+    init {
+        // A new start day reshapes every period, so both tabs jump back to the current one.
+        appScope.launch { MonthStart.day.drop(1).collect { selectedMonth.value = MonthPeriods.current(Dates.zone, it) } }
+    }
 }
 
 /** Application class that owns the container, so the Activity and the listener service share it. */

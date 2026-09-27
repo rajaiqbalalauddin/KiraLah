@@ -7,18 +7,21 @@ import androidx.lifecycle.viewModelScope
 import com.buyless.app.data.model.Category
 import com.buyless.app.data.model.Direction
 import com.buyless.app.data.repo.TransactionRepository
+import com.buyless.app.recap.DayTotal
 import com.buyless.app.recap.RecapBuilder
 import com.buyless.app.recap.RecapData
 import com.buyless.app.recap.RecapTx
 import com.buyless.app.util.Dates
 import com.buyless.app.util.Money
+import com.buyless.app.util.MonthPeriods
+import com.buyless.app.util.MonthStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -28,7 +31,17 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 @Immutable
-data class MonthCard(val period: String, val month: String, val year: Int, val totalText: String, val countText: String, val inProgress: Boolean, val colorIndex: Int)
+data class MonthCard(
+    val period: String,
+    val month: String,
+    val year: Int,
+    /** "25 Sep – 24 Oct" when months start on a day other than the 1st, else null. */
+    val rangeText: String?,
+    val totalText: String,
+    val countText: String,
+    val inProgress: Boolean,
+    val colorIndex: Int,
+)
 
 @Immutable
 data class YearCard(val period: String, val year: Int, val totalText: String, val months: Int, val inProgress: Boolean)
@@ -39,7 +52,7 @@ data class RecapArchiveState(
     val years: List<YearCard> = emptyList(),
     /** Finished months only. */
     val months: List<MonthCard> = emptyList(),
-    /** "September's recap unlocks on 1 October", or null when the current month has no spending yet. */
+    /** "September's recap unlocks on 25 October" (the next month start), or null when the current month has no spending yet. */
     val lockedNote: String? = null,
 )
 
@@ -49,30 +62,37 @@ data class RecapArchiveState(
  */
 class RecapArchiveViewModel(tx: TransactionRepository) : ViewModel() {
 
-    val state: StateFlow<RecapArchiveState> = tx.observeMonths().map { rows ->
-        val now = YearMonth.now(Dates.zone)
-        val months = rows.mapNotNull { row ->
-            val ym = runCatching { YearMonth.parse(row.ym) }.getOrNull() ?: return@mapNotNull null
+    // Day totals are folded into months here, so a new month start day regroups the archive at once.
+    val state: StateFlow<RecapArchiveState> = combine(tx.observeDays(), MonthStart.day) { rows, day ->
+        val today = LocalDate.now(Dates.zone)
+        val now = MonthPeriods.periodOf(today, day)
+        val totals = RecapBuilder.monthTotals(
+            rows.mapNotNull { r -> runCatching { LocalDate.parse(r.day) }.getOrNull()?.let { DayTotal(it, r.outSen, r.count) } },
+            day,
+        )
+        val months = totals.map { t ->
             MonthCard(
-                period = row.ym,
-                month = ym.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH),
-                year = ym.year,
-                totalText = Money.format(row.outSen),
-                countText = if (row.count == 1) "1 transaction" else "${row.count} transactions",
-                inProgress = ym == now,
-                colorIndex = ym.monthValue % CARD_COLORS,
+                period = t.ym.toString(),
+                month = t.ym.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH),
+                year = t.ym.year,
+                rangeText = if (day == 1) null else MonthPeriods.rangeText(t.ym, day, today),
+                totalText = Money.format(t.outSen),
+                countText = if (t.count == 1) "1 transaction" else "${t.count} transactions",
+                inProgress = t.ym == now,
+                colorIndex = t.ym.monthValue % CARD_COLORS,
             )
         }
-        // The year banner still counts this month ("so far"), so it is built from every month.
+        // The year banner still counts this month ("so far"), so it is built from every month. A year
+        // is the twelve periods that start in it, so it always equals the sum of its month cards.
         val years = months.groupBy { it.year }.map { (year, list) ->
-            val total = rows.filter { it.ym.startsWith("$year-") }.sumOf { it.outSen }
+            val total = totals.filter { it.ym.year == year }.sumOf { it.outSen }
             YearCard(year.toString(), year, Money.format(total), list.size, inProgress = year == now.year)
         }
         // A month's story only makes sense once the month is over, so the current month is held back.
         val current = months.firstOrNull { it.inProgress }
         val lockedNote = current?.let {
-            val next = now.plusMonths(1)
-            "${it.month}'s recap unlocks on 1 ${next.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)}"
+            val unlocks = MonthPeriods.endExclusive(now, day)
+            "${it.month}'s recap unlocks on ${unlocks.dayOfMonth} ${unlocks.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)}"
         }
         RecapArchiveState(loading = false, years = years, months = months.filterNot { it.inProgress }, lockedNote = lockedNote)
     }
@@ -100,22 +120,24 @@ class RecapStoryViewModel(private val tx: TransactionRepository, handle: SavedSt
 
     private suspend fun load(): RecapData = withContext(Dispatchers.Default) {
         val zone = Dates.zone
+        val day = MonthStart.value
         val isYear = period.length == 4
         val start: LocalDate
         val endExclusive: LocalDate
         val prevStart: LocalDate
         val label: String
         if (isYear) {
+            // The twelve month periods that start in this year, so it matches the month cards.
             val year = period.toIntOrNull() ?: LocalDate.now(zone).year
-            start = LocalDate.of(year, 1, 1)
-            endExclusive = start.plusYears(1)
-            prevStart = start.minusYears(1)
+            start = MonthPeriods.yearStart(year, day)
+            endExclusive = MonthPeriods.yearStart(year + 1, day)
+            prevStart = MonthPeriods.yearStart(year - 1, day)
             label = year.toString()
         } else {
-            val ym = runCatching { YearMonth.parse(period) }.getOrDefault(YearMonth.now(zone))
-            start = ym.atDay(1)
-            endExclusive = ym.plusMonths(1).atDay(1)
-            prevStart = ym.minusMonths(1).atDay(1)
+            val ym = runCatching { YearMonth.parse(period) }.getOrDefault(MonthPeriods.current(zone, day))
+            start = MonthPeriods.startOf(ym, day)
+            endExclusive = MonthPeriods.endExclusive(ym, day)
+            prevStart = MonthPeriods.startOf(ym.minusMonths(1), day)
             label = "${ym.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${ym.year}"
         }
         fun millis(d: LocalDate) = d.atStartOfDay(zone).toInstant().toEpochMilli()
@@ -143,6 +165,7 @@ class RecapStoryViewModel(private val tx: TransactionRepository, handle: SavedSt
             periodEnd = endExclusive.minusDays(1),
             previousSpentSen = previous,
             zone = zone,
+            monthStartDay = day,
         )
     }
 

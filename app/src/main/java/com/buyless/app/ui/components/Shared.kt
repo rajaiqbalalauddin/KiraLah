@@ -57,7 +57,13 @@ fun MonthSwitcher(label: String, canGoNext: Boolean, onPrev: () -> Unit, onNext:
         IconButton(onClick = onPrev) {
             Icon(Icons.Rounded.ChevronLeft, contentDescription = "Previous month")
         }
-        Text(label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 2.dp))
+        // A date range ("25 Sep – 24 Oct") is longer than a month name, so it gets a smaller size to fit the header.
+        Text(
+            label,
+            style = if (label.length > 10) MaterialTheme.typography.labelMedium else MaterialTheme.typography.titleSmall,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 2.dp),
+        )
         IconButton(onClick = onNext, enabled = canGoNext) {
             Icon(Icons.Rounded.ChevronRight, contentDescription = "Next month")
         }

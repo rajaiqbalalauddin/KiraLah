@@ -2,6 +2,7 @@ package com.buyless.app.limits
 
 import com.buyless.app.data.model.ALL_CATEGORIES
 import com.buyless.app.data.model.LimitPeriod
+import com.buyless.app.util.MonthPeriods
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -46,28 +47,30 @@ object LimitPeriods {
     /**
      * The calendar window of [period] that contains [at]: that day, that Monday-to-Sunday week, or
      * that month. Calendar windows (not "the last 7 days") because that is how people budget.
+     * Months begin on [monthStartDay] (Settings > Month starts on), the same periods Home and Recap use.
      */
-    fun window(period: LimitPeriod, at: Long, zone: ZoneId): Window {
+    fun window(period: LimitPeriod, at: Long, zone: ZoneId, monthStartDay: Int = 1): Window {
         val date = Instant.ofEpochMilli(at).atZone(zone).toLocalDate()
-        val start: LocalDate = when (period) {
-            LimitPeriod.DAY -> date
-            LimitPeriod.WEEK -> date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-            LimitPeriod.MONTH -> date.withDayOfMonth(1)
-        }
-        val end: LocalDate = when (period) {
-            LimitPeriod.DAY -> start.plusDays(1)
-            LimitPeriod.WEEK -> start.plusWeeks(1)
-            LimitPeriod.MONTH -> start.plusMonths(1)
+        val start: LocalDate
+        val end: LocalDate
+        when (period) {
+            LimitPeriod.DAY -> { start = date; end = date.plusDays(1) }
+            LimitPeriod.WEEK -> { start = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)); end = start.plusWeeks(1) }
+            LimitPeriod.MONTH -> {
+                val ym = MonthPeriods.periodOf(date, monthStartDay)
+                start = MonthPeriods.startOf(ym, monthStartDay)
+                end = MonthPeriods.endExclusive(ym, monthStartDay)
+            }
         }
         return Window(start.atStartOfDay(zone).toInstant().toEpochMilli(), end.atStartOfDay(zone).toInstant().toEpochMilli())
     }
 
     /**
      * Earliest moment any current window starts. A week can begin in the previous month, so this is
-     * the earlier of this week's Monday and the 1st of the month. Loading rows from here covers all limits.
+     * the earlier of this week's Monday and the month's start. Loading rows from here covers all limits.
      */
-    fun earliestStart(now: Long, zone: ZoneId): Long =
-        minOf(window(LimitPeriod.WEEK, now, zone).from, window(LimitPeriod.MONTH, now, zone).from)
+    fun earliestStart(now: Long, zone: ZoneId, monthStartDay: Int = 1): Long =
+        minOf(window(LimitPeriod.WEEK, now, zone).from, window(LimitPeriod.MONTH, now, zone, monthStartDay).from)
 
     fun matches(limit: Limit, category: String): Boolean =
         limit.categoryKey == ALL_CATEGORIES || limit.categoryKey == category
@@ -76,9 +79,9 @@ object LimitPeriods {
 object LimitChecker {
 
     /** Current standing of every limit, for the Limits screen. */
-    fun statuses(limits: List<Limit>, rows: List<SpendRow>, now: Long, zone: ZoneId): List<LimitStatus> =
+    fun statuses(limits: List<Limit>, rows: List<SpendRow>, now: Long, zone: ZoneId, monthStartDay: Int = 1): List<LimitStatus> =
         limits.map { limit ->
-            val window = LimitPeriods.window(limit.period, now, zone)
+            val window = LimitPeriods.window(limit.period, now, zone, monthStartDay)
             LimitStatus(limit, spent(limit, rows, window), window)
         }
 
@@ -94,11 +97,11 @@ object LimitChecker {
      * A payment from an earlier window (a late alert about yesterday) is skipped for that period,
      * because "your daily limit is reached" about a day that has ended would only confuse.
      */
-    fun check(limits: List<Limit>, rows: List<SpendRow>, tx: SpendRow, now: Long, zone: ZoneId): List<LimitHit> {
+    fun check(limits: List<Limit>, rows: List<SpendRow>, tx: SpendRow, now: Long, zone: ZoneId, monthStartDay: Int = 1): List<LimitHit> {
         val hits = ArrayList<LimitHit>()
         for (limit in limits) {
             if (!LimitPeriods.matches(limit, tx.category)) continue
-            val window = LimitPeriods.window(limit.period, now, zone)
+            val window = LimitPeriods.window(limit.period, now, zone, monthStartDay)
             if (tx.timestamp !in window) continue
             val after = spent(limit, rows, window)
             val before = after - tx.amountSen

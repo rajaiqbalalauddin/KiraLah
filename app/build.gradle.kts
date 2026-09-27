@@ -15,6 +15,10 @@ val localProps = Properties().apply {
     if (file.exists()) file.inputStream().use { load(it) }
 }
 
+// Builds meant for sharing (the APK on GitHub Releases) leave the key out, because anyone can pull it
+// out of an APK. Run `gradlew assembleDebug -PpublicBuild`; Split then reads receipts on the phone with ML Kit.
+val geminiKey: String = if (project.hasProperty("publicBuild")) "" else localProps.getProperty("GEMINI_API_KEY", "")
+
 android {
     namespace = "com.buyless.app"
     compileSdk = 35
@@ -23,10 +27,10 @@ android {
         applicationId = "com.buyless.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "1.0.0"
 
-        buildConfigField("String", "GEMINI_API_KEY", "\"${localProps.getProperty("GEMINI_API_KEY", "")}\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
     }
 
     buildTypes {

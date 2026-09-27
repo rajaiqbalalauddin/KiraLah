@@ -11,6 +11,7 @@ import com.buyless.app.data.repo.AppsRepository
 import com.buyless.app.data.repo.InstalledApp
 import com.buyless.app.ui.components.kindOf
 import com.buyless.app.util.AppPrefs
+import com.buyless.app.util.MonthStart
 import com.buyless.app.util.SystemAccess
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -52,6 +53,12 @@ class SetupViewModel(
     fun setThemeMode(mode: ThemeMode) {
         prefs.themeMode = mode
         ThemeState.mode = mode
+    }
+
+    /** Saves the month start day and applies it live; every screen watching MonthStart recalculates. */
+    fun setMonthStartDay(day: Int) {
+        prefs.monthStartDay = day
+        MonthStart.set(day)
     }
 
     fun setSwipeDeleteLocked(locked: Boolean) {

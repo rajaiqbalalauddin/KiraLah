@@ -13,6 +13,8 @@ import com.buyless.app.ui.components.kindOf
 import com.buyless.app.ui.components.toUi
 import com.buyless.app.util.Dates
 import com.buyless.app.util.Money
+import com.buyless.app.util.MonthPeriods
+import com.buyless.app.util.MonthStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -95,21 +97,24 @@ class ActivityViewModel(
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
+    // The month and the month start day travel together, so changing the day in Settings reloads at once.
+    private val period = combine(month, MonthStart.day) { ym, day -> ym to day }
+
     @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
     val state: StateFlow<ActivityUiState> = combine(
         // One query covers the chart's six months; the list below only uses the selected month.
-        month.flatMapLatest { ym ->
-            val from = Dates.monthRange(ym.minusMonths(TREND_MONTHS - 1L)).first
-            val to = Dates.monthRange(ym).second
+        period.flatMapLatest { (ym, day) ->
+            val from = Dates.monthRange(ym.minusMonths(TREND_MONTHS - 1L), day).first
+            val to = Dates.monthRange(ym, day).second
             tx.observeRange(from, to)
         },
         apps.observeWatched(),
         selectedApp,
         _query.debounce(200),
-        month,
-    ) { trendRows, watched, selected, query, ym ->
+        period,
+    ) { trendRows, watched, selected, query, (ym, day) ->
         val today = LocalDate.now(Dates.zone)
-        val (monthFrom, monthTo) = Dates.monthRange(ym)
+        val (monthFrom, monthTo) = Dates.monthRange(ym, day)
         val rows = trendRows.filter { it.timestamp in monthFrom until monthTo }
         val q = query.trim()
         val filtered = rows.filter { row ->
@@ -147,15 +152,15 @@ class ActivityViewModel(
 
         ActivityUiState(
             loading = false,
-            monthName = Dates.monthLabel(ym),
-            canGoNext = ym < YearMonth.now(Dates.zone),
+            monthName = Dates.monthLabel(ym, day),
+            canGoNext = ym < MonthPeriods.current(Dates.zone, day),
             outText = Money.format(outSen),
             inText = Money.format(inSen),
             chips = chips,
             sections = sections,
             hasFilter = selected != null || q.isNotEmpty(),
             // Charts follow the app chip but not the search box: search is for finding rows, not for totals.
-            charts = buildCharts(trendRows.filter { selected == null || it.sourcePackage == selected }, ym, today),
+            charts = buildCharts(trendRows.filter { selected == null || it.sourcePackage == selected }, ym, day, today),
         )
     }
         .flowOn(Dispatchers.Default)
@@ -165,36 +170,39 @@ class ActivityViewModel(
      * Spending (money out, own transfers excluded) per day of the selected month, per month for the
      * last six months, and per category for the selected month.
      */
-    private fun buildCharts(rows: List<TransactionEntity>, ym: YearMonth, today: LocalDate): SpendCharts {
+    private fun buildCharts(rows: List<TransactionEntity>, ym: YearMonth, startDay: Int, today: LocalDate): SpendCharts {
         val spend = rows.filter { !it.isInternal && it.direction == Direction.OUT.name }
 
-        // Days: every day of the month gets a slot, so a bar's position is its date.
-        val byDay = LongArray(ym.lengthOfMonth())
+        // Days: every day of the period gets a slot, so a bar's position is its date. With a custom
+        // start day the first bar is that day (25, 26 ... 24), not the 1st.
+        val start = MonthPeriods.startOf(ym, startDay)
+        val byDay = LongArray(MonthPeriods.length(ym, startDay))
         val byMonth = HashMap<YearMonth, Long>()
         val byCategory = HashMap<String, Long>()
         for (r in spend) {
             val date = Dates.toDate(r.timestamp)
-            val rowMonth = YearMonth.from(date)
+            val rowMonth = MonthPeriods.periodOf(date, startDay)
             byMonth[rowMonth] = (byMonth[rowMonth] ?: 0L) + r.amountSen
             if (rowMonth == ym) {
-                byDay[date.dayOfMonth - 1] += r.amountSen
+                byDay[(date.toEpochDay() - start.toEpochDay()).toInt()] += r.amountSen
                 byCategory[r.category] = (byCategory[r.category] ?: 0L) + r.amountSen
             }
         }
         val days = byDay.mapIndexed { i, sen ->
-            val date = ym.atDay(i + 1)
+            val date = start.plusDays(i.toLong())
             ChartBar(
-                label = (i + 1).toString(),
+                label = date.dayOfMonth.toString(),
                 sen = sen,
                 detail = "${date.format(DAY_DETAIL)}: ${Money.format(sen)}",
                 isCurrent = date == today,
             )
         }
         // Average over days that have happened, so a young month is not diluted by empty future days.
+        val currentPeriod = MonthPeriods.periodOf(today, startDay)
         val daysSoFar = when {
-            ym == YearMonth.from(today) -> today.dayOfMonth
-            ym.isAfter(YearMonth.from(today)) -> 0
-            else -> ym.lengthOfMonth()
+            ym == currentPeriod -> (today.toEpochDay() - start.toEpochDay() + 1).toInt()
+            ym.isAfter(currentPeriod) -> 0
+            else -> byDay.size
         }.coerceAtLeast(1)
         val monthTotal = byDay.sum()
 
@@ -204,7 +212,7 @@ class ActivityViewModel(
             ChartBar(
                 label = m.format(MONTH_SHORT),
                 sen = sen,
-                detail = "${m.format(MONTH_DETAIL)}: ${Money.format(sen)}",
+                detail = "${if (startDay == 1) m.format(MONTH_DETAIL) else MonthPeriods.rangeText(m, startDay, today)}: ${Money.format(sen)}",
                 isCurrent = m == ym,
             )
         }
@@ -261,7 +269,7 @@ class ActivityViewModel(
     fun resetFilters() {
         selectedApp.value = null
         _query.value = ""
-        month.value = YearMonth.now(Dates.zone)
+        month.value = MonthPeriods.current(Dates.zone, MonthStart.value)
     }
 
     fun previousMonth() {
@@ -269,6 +277,6 @@ class ActivityViewModel(
     }
 
     fun nextMonth() {
-        if (month.value < YearMonth.now(Dates.zone)) month.value = month.value.plusMonths(1)
+        if (month.value < MonthPeriods.current(Dates.zone, MonthStart.value)) month.value = month.value.plusMonths(1)
     }
 }

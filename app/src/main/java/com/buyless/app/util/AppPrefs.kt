@@ -56,7 +56,16 @@ class AppPrefs(context: Context) {
             SwipeDeleteLock.locked = value
         }
 
+    /**
+     * Day of the month a "month" starts on (1 to 31), for people who budget from payday to payday.
+     * Read at start-up into MonthStart, which is what the screens observe.
+     */
+    var monthStartDay: Int
+        get() = prefs.getInt(KEY_MONTH_START, 1)
+        set(value) = prefs.edit().putInt(KEY_MONTH_START, value).apply()
+
     private companion object {
+        const val KEY_MONTH_START = "month_start_day"
         const val KEY_SWIPE_LOCK = "swipe_delete_locked"
         const val KEY_THEME = "theme_mode"
         const val KEY_HIDE_BALANCES = "hide_balances"

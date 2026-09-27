@@ -46,6 +46,7 @@ import com.buyless.app.ui.setup.SetupViewModel
 import com.buyless.app.ui.theme.BColors
 import com.buyless.app.ui.theme.ThemeMode
 import com.buyless.app.ui.theme.ThemeState
+import com.buyless.app.util.MonthStart
 import com.buyless.app.util.SwipeDeleteLock
 import androidx.compose.material.icons.rounded.SwipeLeft
 import androidx.compose.material3.Switch
@@ -92,7 +93,7 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.titleMedium,
                     color = if (state.permissions.notificationAccess) BColors.Green else BColors.Danger,
                 )
-                PermissionSteps(state.permissions)
+                PermissionSteps(state.permissions, onRefresh = vm::refreshPermissions)
             }
         }
 
@@ -153,6 +154,11 @@ fun SettingsScreen(
                 "Make your own, pick an icon and colour",
                 onOpenCategories,
             )
+        }
+
+        item {
+            val monthStart by MonthStart.day.collectAsStateWithLifecycle()
+            MonthStartCard(monthStart, vm::setMonthStartDay)
         }
 
         item { AppearanceCard(ThemeState.mode, vm::setThemeMode) }

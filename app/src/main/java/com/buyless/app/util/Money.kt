@@ -66,16 +66,15 @@ object Dates {
     private val time = DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH)
     private val dayMonth = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
     private val dayFull = DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)
-    private val monthName = DateTimeFormatter.ofPattern("MMMM", Locale.ENGLISH)
-    private val monthYear = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
     private val fullDate = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
-    /** Start (inclusive) and end (exclusive) of a month in epoch millis, for range queries. */
-    fun monthRange(month: YearMonth): Pair<Long, Long> {
-        val from = month.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
-        val to = month.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
-        return from to to
-    }
+    /**
+     * Start (inclusive) and end (exclusive) of a month in epoch millis, for range queries. A "month" is
+     * the period starting in [month] on the user's month start day (MonthPeriods), which with the
+     * default day 1 is simply the calendar month.
+     */
+    fun monthRange(month: YearMonth, startDay: Int = MonthStart.value): Pair<Long, Long> =
+        MonthPeriods.range(month, zone, startDay)
 
     fun toDate(millis: Long): LocalDate = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
 
@@ -94,8 +93,9 @@ object Dates {
         else -> date.format(dayFull)
     }
 
-    fun monthLabel(month: YearMonth): String =
-        if (month.year == YearMonth.now(zone).year) month.format(monthName) else month.format(monthYear)
+    /** "September", or "25 Sep – 24 Oct" when months start on another day. */
+    fun monthLabel(month: YearMonth, startDay: Int = MonthStart.value): String =
+        MonthPeriods.label(month, startDay, LocalDate.now(zone))
 
     fun fullDate(millis: Long): String = Instant.ofEpochMilli(millis).atZone(zone).format(fullDate)
 

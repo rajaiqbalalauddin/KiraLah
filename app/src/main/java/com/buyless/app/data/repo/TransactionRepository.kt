@@ -149,7 +149,7 @@ class TransactionRepository(
         }
     }
 
-    fun observeMonths() = txDao.observeMonths().distinctUntilChanged()
+    fun observeDays() = txDao.observeDays().distinctUntilChanged()
 
     suspend fun countedInRange(from: Long, to: Long): List<TransactionEntity> = txDao.countedInRange(from, to)
 

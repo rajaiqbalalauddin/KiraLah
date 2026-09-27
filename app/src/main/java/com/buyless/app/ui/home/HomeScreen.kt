@@ -269,7 +269,7 @@ private fun HeroCard(state: HomeUiState) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Spent in ${state.monthName}", style = MaterialTheme.typography.bodyMedium, color = BColors.VioletOnDark)
+            Text(state.spentTitle, style = MaterialTheme.typography.bodyMedium, color = BColors.VioletOnDark)
             Text(state.spentText, style = MaterialTheme.typography.displaySmall, color = BColors.OnColor)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

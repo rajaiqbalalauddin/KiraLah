@@ -3,9 +3,11 @@ package com.buyless.app.recap
 import com.buyless.app.data.model.Category
 import com.buyless.app.data.model.CategoryKeys
 import com.buyless.app.data.model.Direction
+import com.buyless.app.util.MonthPeriods
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.TextStyle
 import java.util.Locale
@@ -55,7 +57,23 @@ data class RecapData(
  * Turns raw transactions into Wrapped-style facts. Pure Kotlin, so every number on the story slides is
  * unit tested. Transfers between your own apps never reach here (the query excludes them).
  */
+/** Spending on one local day, as read from the database. */
+data class DayTotal(val date: LocalDate, val outSen: Long, val count: Int)
+
+/** Spending in one month period (see MonthPeriods). ym names the period by the month it starts in. */
+data class MonthTotal(val ym: YearMonth, val outSen: Long, val count: Int)
+
 object RecapBuilder {
+
+    /**
+     * Folds day totals into month periods, newest first. With start day 25, spending on 3 Oct lands in
+     * the September period (25 Sep to 24 Oct), which is what makes the Recap cards match Home.
+     */
+    fun monthTotals(days: List<DayTotal>, monthStartDay: Int): List<MonthTotal> =
+        days.groupBy { MonthPeriods.periodOf(it.date, monthStartDay) }
+            .map { (ym, list) -> MonthTotal(ym, list.sumOf { it.outSen }, list.sumOf { it.count }) }
+            .sortedByDescending { it.ym }
+
 
     fun build(
         txs: List<RecapTx>,
@@ -66,6 +84,8 @@ object RecapBuilder {
         previousSpentSen: Long?,
         zone: ZoneId,
         today: LocalDate = LocalDate.now(zone),
+        /** Day months start on (Settings). Decides which month bucket a date lands in for a year recap. */
+        monthStartDay: Int = 1,
     ): RecapData {
         val out = txs.filter { it.direction == Direction.OUT }
         val spent = out.sumOf { it.amountSen }
@@ -101,11 +121,12 @@ object RecapBuilder {
         val buckets = if (isYear) {
             (1..12).map { m ->
                 val label = java.time.Month.of(m).getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
-                label to dates.filter { it.second.monthValue == m }.sumOf { it.first.amountSen }
+                label to dates.filter { MonthPeriods.periodOf(it.second, monthStartDay).monthValue == m }.sumOf { it.first.amountSen }
             }
         } else {
             (1..5).map { w ->
-                "Week $w" to dates.filter { (it.second.dayOfMonth - 1) / 7 + 1 == w }.sumOf { it.first.amountSen }
+                // Counted from the period's first day, so with a 25th start, 25 to 31 Sep is Week 1.
+                "Week $w" to dates.filter { (it.second.toEpochDay() - periodStart.toEpochDay()) / 7 + 1 == w.toLong() }.sumOf { it.first.amountSen }
             }.filter { (label, sen) -> sen > 0 || label != "Week 5" }
         }
 

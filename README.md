@@ -1,5 +1,15 @@
 # KiraLah
 
+<p align="center">
+  <a href="https://github.com/rajaiqbalalauddin/KiraLah/releases/latest/download/KiraLah.apk"><img src="https://img.shields.io/badge/%E2%AC%87%20Download%20APK-Android-5B3DF5?style=for-the-badge&logo=android&logoColor=white" alt="Download the KiraLah APK" height="48"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/rajaiqbalalauddin/KiraLah/releases/latest"><img src="https://img.shields.io/github/v/release/rajaiqbalalauddin/KiraLah?label=latest%20version&color=5B3DF5" alt="Latest version"></a>
+  <img src="https://img.shields.io/badge/Android-8.0%2B-0B7A5F" alt="Android 8.0 or newer">
+  <a href="https://github.com/rajaiqbalalauddin/KiraLah/releases"><img src="https://img.shields.io/github/downloads/rajaiqbalalauddin/KiraLah/total?label=downloads&color=0B7A5F" alt="Downloads"></a>
+</p>
+<p align="center"><b>Tap Download APK on your Android phone.</b> New to installing APKs? See <a href="#install-on-your-phone">the install steps</a>.</p>
+
 <table>
   <tr>
     <td align="center"><img src="docs/screenshots/setup.png" width="190" alt="Setup"><br><sub>Setup</sub></td>
@@ -22,6 +32,38 @@ e-wallet apps (MAE, Bank Islam, Touch 'n Go, plus any app you add), works out th
 and keeps everything on your phone.
 
 KiraLah was called Buyless early on, so the code still lives in the `com.buyless.app` package.
+
+## Download
+
+> [!IMPORTANT]
+> **[Download the latest KiraLah APK](https://github.com/rajaiqbalalauddin/KiraLah/releases/latest/download/KiraLah.apk)** (version 1.0.0, about 80 MB). Every version is on the
+> [Releases page](https://github.com/rajaiqbalalauddin/KiraLah/releases).
+
+KiraLah is not on the Play Store, so Android installs it as an app "from an unknown source". That is normal
+for an APK from GitHub.
+
+### Install on your phone
+
+1. On the phone, open the download link above in Chrome and download the APK (about 80 MB).
+2. Tap the downloaded file (or open it from **Files > Downloads**).
+3. If Android says Chrome is not allowed to install apps, tap **Settings**, turn on **Allow from this source**,
+   then go back and tap **Install**.
+4. If Play Protect warns that it does not recognise the app, tap **More details > Install anyway**. It warns
+   about every app that is not from the Play Store.
+5. Open KiraLah and follow Setup. When you turn on **Notification access** and the switch is greyed out, open
+   **Settings > Apps > KiraLah**, tap the three-dot menu, choose **Allow restricted settings**, and try again.
+6. Allow notifications when asked. Spending limit reminders need them.
+
+### Update to a new version
+
+Download the newer APK and install it over the old one. Your transactions, limits and splits stay, because
+everything is stored on the phone. Do not uninstall first, as that deletes your data.
+
+### Good to know
+
+- Needs Android 8.0 or newer.
+- The public APK has no Gemini key built in, so Split reads receipts on the phone with ML Kit. It works
+  offline, but it is less accurate on messy receipts than the Gemini reader in a build with your own key.
 
 ## Run it
 
@@ -113,6 +155,15 @@ amber at 80% and red once the limit is used up.
 - The rules are in `limits/LimitMath.kt` (unit tested in `LimitCheckerTest`). `limits/LimitAlerts.kt` runs them after
   every new payment out, through a hook in `TransactionRepository`. The UI is `ui/limits/LimitsPanel.kt`. Limits live
   in the `spending_limits` table (migration 7 to 8) and are deleted along with their custom category.
+
+**Month starts on.** Settings > Month starts on lets you pick the day your month begins (1 to 31), for example
+payday on the 25th. A month then runs from 25 Sep to 24 Oct and is named after the month it starts in
+("September"). Home, Activity (list, totals and both charts), Recap and monthly spending limits all follow it, and
+changing the day regroups your history at once, since nothing is stored per month. Recap cards show the range,
+a month's story unlocks on the next start day, its "Week 1" begins on the start day, and a year covers the twelve
+months that start in it, so the year total always equals its month cards. Days 29 to 31 fall back to the last day
+in shorter months (start day 31 means 28 Feb). The date maths is in `util/MonthPeriods.kt`, unit tested in
+`MonthPeriodsTest`.
 
 **Removing spending.** Swipe any transaction left in Activity or Recent to delete it, with Undo in the
 snackbar. If it was half of a transfer pair, Undo re-links the pair.
@@ -218,6 +269,32 @@ app/src/main/java/com/buyless/app/
   ui/                      theme, shared components, one package per screen, navigation
   util/                    Money and date formatting, known Malaysian apps, system settings shortcuts
 ```
+
+## Versions
+
+**1.0.0** (27 Sep 2026)
+
+- Month starts on: budget from any day of the month, such as payday. Home, Activity, Recap and monthly
+  limits all follow it.
+- Spending limits on the Activity tab: daily, weekly or monthly, for one category or everything, with a
+  reminder on each payment once a limit is used up and a heads-up at 80%.
+- Custom categories with your own name, colour and icon.
+- Night mode, Activity charts, Recap stories, and swipe to delete with Undo.
+- Split: receipt reading, drag items onto people, pay cards with your QR sent over WhatsApp, and split history.
+- Automatic tracking from bank and e-wallet notifications, with exact templates for Bank Islam.
+- Fix: the Keep running step no longer keeps showing Allow after it has been allowed.
+
+### Publishing a release
+
+1. Bump `versionCode` (by 1) and `versionName` in `app/build.gradle.kts`.
+2. Build the public APK without your Gemini key: `.\gradlew assembleDebug -PpublicBuild`
+3. Rename `app/build/outputs/apk/debug/app-debug.apk` to `KiraLah.apk`. Keep this exact name every time: the
+   Download button points at `releases/latest/download/KiraLah.apk`, so it always serves the newest release.
+4. On GitHub, open **Releases > Draft a new release**, create the tag `v<version>`, attach the APK, and publish.
+5. Add the release to this list. The version badge at the top updates itself.
+
+The APK is signed with the debug key on your PC. Always build releases on the same PC, or phones will refuse to
+install the update over the old version.
 
 ## Not done yet
 

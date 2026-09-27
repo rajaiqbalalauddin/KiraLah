@@ -12,6 +12,8 @@ import com.buyless.app.ui.components.kindOf
 import com.buyless.app.ui.components.toUi
 import com.buyless.app.util.AppPrefs
 import com.buyless.app.util.Dates
+import com.buyless.app.util.MonthPeriods
+import com.buyless.app.util.MonthStart
 import com.buyless.app.util.Money
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,6 +33,8 @@ import java.time.YearMonth
 data class HomeUiState(
     val loading: Boolean = true,
     val monthName: String = "",
+    /** "Spent in September" or "Spent 25 Sep – 24 Oct". */
+    val spentTitle: String = "",
     val canGoNext: Boolean = false,
     val spentText: String = Money.format(0),
     val inText: String = Money.format(0),
@@ -61,8 +65,9 @@ class HomeViewModel(
     private val hideBalances = MutableStateFlow(prefs.hideBalances)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val state: StateFlow<HomeUiState> = month.flatMapLatest { ym ->
-        val (from, to) = Dates.monthRange(ym)
+    // Paired with the month start day, so changing it in Settings re-runs the queries straight away.
+    val state: StateFlow<HomeUiState> = combine(month, MonthStart.day) { ym, day -> ym to day }.flatMapLatest { (ym, day) ->
+        val (from, to) = Dates.monthRange(ym, day)
         val totals = combine(
             tx.observeTotal(Direction.OUT, from, to),
             tx.observeTotal(Direction.IN, from, to),
@@ -86,8 +91,9 @@ class HomeViewModel(
             val left = inn - out
             HomeUiState(
                 loading = false,
-                monthName = Dates.monthLabel(ym),
-                canGoNext = ym < YearMonth.now(Dates.zone),
+                monthName = Dates.monthLabel(ym, day),
+                spentTitle = MonthPeriods.spentTitle(ym, day, today),
+                canGoNext = ym < MonthPeriods.current(Dates.zone, day),
                 spentText = Money.format(out),
                 inText = Money.format(inn),
                 leftText = Money.format(left),
@@ -153,7 +159,7 @@ class HomeViewModel(
 
     /** Jumps back to the current month. Used when the Home tab is tapped again. */
     fun thisMonth() {
-        month.value = YearMonth.now(Dates.zone)
+        month.value = MonthPeriods.current(Dates.zone, MonthStart.value)
     }
 
     fun previousMonth() {
@@ -161,7 +167,7 @@ class HomeViewModel(
     }
 
     fun nextMonth() {
-        if (month.value < YearMonth.now(Dates.zone)) month.value = month.value.plusMonths(1)
+        if (month.value < MonthPeriods.current(Dates.zone, MonthStart.value)) month.value = month.value.plusMonths(1)
     }
 
     private companion object {
