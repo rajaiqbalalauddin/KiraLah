@@ -36,7 +36,7 @@ KiraLah was called Buyless early on, so the code still lives in the `com.buyless
 ## Download
 
 > [!IMPORTANT]
-> **[Download the latest KiraLah APK](https://github.com/rajaiqbalalauddin/KiraLah/releases/latest/download/KiraLah.apk)** (version 1.0.0, about 80 MB). Every version is on the
+> **[Download the latest KiraLah APK](https://github.com/rajaiqbalalauddin/KiraLah/releases/latest/download/KiraLah.apk)** (version 1.1.0, about 80 MB). Every version is on the
 > [Releases page](https://github.com/rajaiqbalalauddin/KiraLah/releases).
 
 KiraLah is not on the Play Store, so Android installs it as an app "from an unknown source". That is normal
@@ -226,7 +226,16 @@ Opening a specific chat with a picture uses WhatsApp's undocumented `jid` extra;
 working, WhatsApp shows its chat picker, and without WhatsApp the normal share sheet opens.
 
 **Transfers between your own apps.** Money going out of one watched app and into another with the same
-amount within 10 minutes is paired and left out of totals. You can undo this on any transaction.
+amount within 10 minutes is paired and left out of totals. You can also tick "Transfer between my own
+apps" on any entry; you then have to pick where it went (or came from), and lists show it as "BIMB → TNG".
+If that app has no entry of its own, KiraLah adds a stand-in one there (origin `MIRROR`) so its balance
+stays right, and that app's real alert replaces the stand-in when it arrives. Cash gets no stand-in.
+Logic lives in `TransactionRepository` (migration 8 to 9 adds `counterpartPackage` / `counterpartLabel`).
+
+**Remembered categories.** Under the category chips, choose "This entry only" or "Every <merchant> entry".
+The second saves a rule (`category_rules`, per merchant and direction) so new alerts, Quick check guesses
+and hand-typed entries from that merchant get that category. Past entries are not changed. Rules are listed
+under Settings > Categories > Remembered merchants, where you can forget one.
 
 ## Performance choices
 

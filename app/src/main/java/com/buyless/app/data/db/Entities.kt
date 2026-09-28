@@ -33,6 +33,32 @@ data class TransactionEntity(
     val origin: String,
     val rawText: String? = null,
     val dedupKey: String? = null,
+    /**
+     * For a transfer between your own apps: the other app. Money out means it went there, money in
+     * means it came from there. Kept on the row itself so a transfer still says "BIMB → TNG" even
+     * when the other side has no entry of its own (for example Cash).
+     */
+    val counterpartPackage: String? = null,
+    val counterpartLabel: String? = null,
+)
+
+/**
+ * "Always put this merchant in this category." Saved when the user picks "Every <merchant> entry"
+ * in the editor. Keyed by merchant and direction, because paying "Ali" and receiving from "Ali"
+ * usually mean different things. merchantKey is the lowercased, space-trimmed name (see
+ * CategoryRules.key), merchant is the name as the user saw it, for the Settings list.
+ */
+@Entity(
+    tableName = "category_rules",
+    indices = [Index(value = ["merchantKey", "direction"], unique = true)],
+)
+data class CategoryRuleEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val merchantKey: String,
+    val merchant: String,
+    val direction: String,
+    val category: String,
+    val createdAt: Long,
 )
 
 /**

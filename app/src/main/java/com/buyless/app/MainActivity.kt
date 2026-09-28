@@ -66,6 +66,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Every return to the app checks whether a new month has started while it sat in the background. */
+    override fun onResume() {
+        super.onResume()
+        container.rollToCurrentMonth()
+    }
+
     /**
      * Light icons on dark bars at night, dark icons by day. The window background is recoloured
      * too, so there is no light flash behind the keyboard or during screen transitions.

@@ -20,6 +20,7 @@ import com.buyless.app.data.repo.TransactionRepository
 import com.buyless.app.ui.components.kindOf
 import com.buyless.app.util.Dates
 import com.buyless.app.util.Money
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -72,7 +73,24 @@ class EditorViewModel(
     /** Category key: a built-in name ("FOOD") or a custom one ("custom:3"). See CategoryKeys. */
     var category by mutableStateOf(Category.FOOD.name)
     var sourcePackage by mutableStateOf(MANUAL_SOURCE)
+        private set
     var isInternal by mutableStateOf(false)
+        private set
+
+    /**
+     * For a transfer between your own apps: the other app (where it went for money out, where it
+     * came from for money in). Required when isInternal is on, so every transfer reads "BIMB → TNG".
+     */
+    var counterpartPackage by mutableStateOf<String?>(null)
+        private set
+    var counterpartError by mutableStateOf<String?>(null)
+        private set
+
+    /**
+     * The choice under the category chips. false = "This entry only", true = "Every <merchant> entry",
+     * which also files future entries from this merchant under the chosen category.
+     */
+    var rememberForMerchant by mutableStateOf(false)
     var dateMillis by mutableLongStateOf(System.currentTimeMillis())
     var raw by mutableStateOf<RawNotification?>(null)
         private set
@@ -91,6 +109,16 @@ class EditorViewModel(
 
     private var currentPendingId: Long = pendingArg
     private var sourceLabels: Map<String, String> = emptyMap()
+
+    /** Labels of apps seen on the loaded row, kept apart so the watched-apps flow cannot overwrite them. */
+    private val loadedLabels = HashMap<String, String>()
+
+    /**
+     * True once the user taps a category. Until then, typing a merchant with a remembered category
+     * picks that category for them; afterwards their choice is never overridden.
+     */
+    private var categoryTouched = false
+    private var lookupJob: Job? = null
 
     val sources: StateFlow<List<SourceOption>> = apps.observeWatched()
         .map { watched ->
@@ -128,11 +156,19 @@ class EditorViewModel(
         amountText = p.guessAmountSen?.let(Money::toInput) ?: ""
         direction = p.guessDirection?.let { runCatching { Direction.valueOf(it) }.getOrNull() } ?: Direction.OUT
         merchant = p.guessMerchant ?: ""
-        category = p.guessCategory?.takeIf { CategoryKeys.builtIn(it) != null }
+        // Looked up again here, so a merchant remembered a moment ago (earlier in this same queue) applies too.
+        val remembered = tx.rememberedCategory(p.guessMerchant, direction.name)
+        category = remembered
+            ?: p.guessCategory?.takeIf { isPickable(it) }
             ?: if (direction == Direction.IN) Category.INCOME.name else Category.OTHER.name
+        rememberForMerchant = remembered != null
+        categoryTouched = false
         sourcePackage = p.sourcePackage
+        loadedLabels[p.sourcePackage] = p.sourceLabel
         dateMillis = p.postedAt
         isInternal = false
+        counterpartPackage = null
+        counterpartError = null
         error = null
     }
 
@@ -147,10 +183,63 @@ class EditorViewModel(
         merchant = t.merchant
         category = t.category
         sourcePackage = t.sourcePackage
-        sourceLabels = sourceLabels + (t.sourcePackage to t.sourceLabel)
+        loadedLabels[t.sourcePackage] = t.sourceLabel
         isInternal = t.isInternal
+        counterpartPackage = t.counterpartPackage
+        t.counterpartPackage?.let { pkg -> t.counterpartLabel?.let { loadedLabels[pkg] = it } }
+        rememberForMerchant = !t.isInternal && tx.rememberedCategory(t.merchant, t.direction) == t.category
         dateMillis = t.timestamp
         raw = t.rawText?.let { RawNotification(t.sourcePackage, t.sourceLabel, AppKind.WALLET, Dates.fullDate(t.timestamp), it) }
+    }
+
+    /** A category chip was tapped (or a new category was just made). */
+    fun pickCategory(key: String) {
+        category = key
+        categoryTouched = true
+    }
+
+    /**
+     * Merchant typed. In Quick check and new entries, a merchant with a remembered category selects
+     * it straight away, unless the user already picked a category themselves. Editing an old entry
+     * never changes its category this way.
+     */
+    fun onMerchantChange(value: String) {
+        merchant = value
+        if (mode == EditorMode.EDIT || categoryTouched || isInternal) return
+        lookupJob?.cancel()
+        lookupJob = viewModelScope.launch {
+            val remembered = tx.rememberedCategory(value, direction.name)
+            if (remembered != null) {
+                category = remembered
+                rememberForMerchant = true
+            } else {
+                rememberForMerchant = false
+            }
+        }
+    }
+
+    /** The name "Every ... entry" refers to: what was typed, or the app's name when left blank. */
+    fun merchantForRule(): String = merchant.trim().ifEmpty { labelOf(sourcePackage) }
+
+    fun selectSource(packageName: String) {
+        sourcePackage = packageName
+        // Money cannot move from an app to itself.
+        if (counterpartPackage == packageName) counterpartPackage = null
+    }
+
+    fun setTransfer(value: Boolean) {
+        isInternal = value
+        counterpartError = null
+        if (!value) {
+            counterpartPackage = null
+            // Leaving the transfer: TRANSFER is not a chip, so fall back to what the direction suggests.
+            if (category == Category.TRANSFER.name) category = if (direction == Direction.IN) Category.INCOME.name else Category.OTHER.name
+        }
+    }
+
+    fun selectCounterpart(packageName: String) {
+        counterpartPackage = packageName
+        counterpartError = null
     }
 
     /** resetTo = true picks the default for the direction, used when the chosen category was just deleted. */
@@ -189,10 +278,12 @@ class EditorViewModel(
             return
         }
         error = null
-        val label = when (sourcePackage) {
-            MANUAL_SOURCE -> "Cash / other"
-            else -> sourceLabels[sourcePackage] ?: raw?.label ?: sourcePackage
+        if (isInternal && counterpartPackage == null) {
+            counterpartError = if (direction == Direction.OUT) "Pick the app the money went to" else "Pick the app the money came from"
+            return
         }
+        val label = labelOf(sourcePackage)
+        val counterpart = if (isInternal) counterpartPackage else null
         val draft = TransactionDraft(
             amountSen = amount,
             direction = direction,
@@ -203,8 +294,12 @@ class EditorViewModel(
             timestamp = dateMillis,
             isInternal = isInternal,
             rawText = raw?.text,
+            counterpartPackage = counterpart,
+            counterpartLabel = counterpart?.let(this::labelOf),
         )
+        val remember = rememberForMerchant && !isInternal
         viewModelScope.launch {
+            if (remember) tx.rememberCategory(draft.merchant, draft.direction, draft.category)
             when (mode) {
                 EditorMode.REVIEW -> {
                     tx.savePending(currentPendingId, draft)
@@ -239,6 +334,15 @@ class EditorViewModel(
             finished = true
         }
     }
+
+    private fun labelOf(packageName: String): String = when (packageName) {
+        MANUAL_SOURCE -> "Cash / other"
+        else -> sourceLabels[packageName] ?: loadedLabels[packageName] ?: raw?.label?.takeIf { packageName == raw?.packageName } ?: packageName
+    }
+
+    /** Any stored key but TRANSFER can be shown as a chip (built-in or one of the user's own). */
+    private fun isPickable(key: String): Boolean =
+        key != Category.TRANSFER.name && (CategoryKeys.builtIn(key) != null || CategoryKeys.customId(key) != null)
 
     /** Quick check flows straight into the next waiting item, so clearing a backlog is one tap each. */
     private suspend fun advanceQueue() {

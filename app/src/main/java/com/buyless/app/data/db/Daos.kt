@@ -88,11 +88,100 @@ interface TransactionDao {
         around: Long,
     ): TransactionEntity?
 
-    @Query("UPDATE transactions SET isInternal = 1, linkedId = :partnerId, category = 'TRANSFER' WHERE id = :id")
-    suspend fun markInternal(id: Long, partnerId: Long)
+    /**
+     * Same idea as [findTransferPartner], but the user already told us which app the money went to
+     * (or came from), so only that app is searched, and over a wider window.
+     */
+    @Query(
+        "SELECT * FROM transactions WHERE amountSen = :amountSen AND direction = :direction " +
+            "AND sourcePackage = :inPackage AND id != :excludeId " +
+            "AND (isInternal = 0 OR (linkedId IS NULL AND counterpartPackage = :fromPackage)) " +
+            "AND timestamp BETWEEN :from AND :to ORDER BY ABS(timestamp - :around) LIMIT 1",
+    )
+    suspend fun findPartnerIn(
+        amountSen: Long,
+        direction: String,
+        inPackage: String,
+        fromPackage: String,
+        excludeId: Long,
+        from: Long,
+        to: Long,
+        around: Long,
+    ): TransactionEntity?
 
-    @Query("UPDATE transactions SET isInternal = 0, linkedId = NULL, category = :category WHERE id = :id")
+    /**
+     * A transfer the user already declared ("to TNG") that has no other half yet, for example
+     * because its stand-in was deleted. A new TNG entry of the same amount is that other half.
+     */
+    @Query(
+        "SELECT * FROM transactions WHERE isInternal = 1 AND linkedId IS NULL AND counterpartPackage = :counterpart " +
+            "AND amountSen = :amountSen AND direction = :direction AND id != :excludeId " +
+            "AND timestamp BETWEEN :from AND :to ORDER BY ABS(timestamp - :around) LIMIT 1",
+    )
+    suspend fun findWaitingTransfer(
+        amountSen: Long,
+        direction: String,
+        counterpart: String,
+        excludeId: Long,
+        from: Long,
+        to: Long,
+        around: Long,
+    ): TransactionEntity?
+
+    /**
+     * A stand-in entry KiraLah added on the receiving app of a transfer (origin MIRROR), waiting for
+     * that app's own notification. When the real one arrives it takes the stand-in's place.
+     */
+    @Query(
+        "SELECT * FROM transactions WHERE origin = 'MIRROR' AND amountSen = :amountSen AND direction = :direction " +
+            "AND sourcePackage = :inPackage AND id != :excludeId " +
+            "AND timestamp BETWEEN :from AND :to ORDER BY ABS(timestamp - :around) LIMIT 1",
+    )
+    suspend fun findMirror(
+        amountSen: Long,
+        direction: String,
+        inPackage: String,
+        excludeId: Long,
+        from: Long,
+        to: Long,
+        around: Long,
+    ): TransactionEntity?
+
+    @Query(
+        "UPDATE transactions SET isInternal = 1, linkedId = :partnerId, category = 'TRANSFER', " +
+            "counterpartPackage = :counterpartPackage, counterpartLabel = :counterpartLabel WHERE id = :id",
+    )
+    suspend fun markInternal(id: Long, partnerId: Long?, counterpartPackage: String?, counterpartLabel: String?)
+
+    @Query("UPDATE transactions SET linkedId = :partnerId WHERE id = :id")
+    suspend fun setLinked(id: Long, partnerId: Long?)
+
+    @Query(
+        "UPDATE transactions SET isInternal = 0, linkedId = NULL, category = :category, " +
+            "counterpartPackage = NULL, counterpartLabel = NULL WHERE id = :id",
+    )
     suspend fun clearInternal(id: Long, category: String)
+}
+
+@Dao
+interface CategoryRuleDao {
+    @Query("SELECT * FROM category_rules WHERE merchantKey = :merchantKey AND direction = :direction LIMIT 1")
+    suspend fun find(merchantKey: String, direction: String): CategoryRuleEntity?
+
+    /** REPLACE on the (merchant, direction) index, so choosing a new category overwrites the old rule. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(rule: CategoryRuleEntity): Long
+
+    /** For Settings > Categories, so a rule can be seen and removed. */
+    @Query("SELECT * FROM category_rules ORDER BY merchant COLLATE NOCASE")
+    fun observeAll(): Flow<List<CategoryRuleEntity>>
+
+    @Query("DELETE FROM category_rules WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    /** Rules pointing at a custom category go with it, so nothing is ever filed under a deleted one. */
+    @Query("DELETE FROM category_rules WHERE category = :key")
+    suspend fun deleteForCategory(key: String)
 }
 
 @Dao

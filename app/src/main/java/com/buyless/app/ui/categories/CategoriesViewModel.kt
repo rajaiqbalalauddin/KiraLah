@@ -2,6 +2,7 @@ package com.buyless.app.ui.categories
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.buyless.app.data.db.CategoryRuleEntity
 import com.buyless.app.data.db.CustomCategoryEntity
 import com.buyless.app.data.repo.CategoryRepository
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,6 +28,14 @@ class CategoriesViewModel(private val repo: CategoryRepository) : ViewModel() {
                 repo.update(existing.copy(name = name, iconKey = iconKey, colorIndex = colorIndex))
             }
         }
+    }
+
+    /** Merchants with a remembered category ("Every Grab entry"), listed so they can be forgotten. */
+    val rules: StateFlow<List<CategoryRuleEntity>> = repo.observeRules()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun forgetRule(id: Long) {
+        viewModelScope.launch { repo.deleteRule(id) }
     }
 
     suspend fun usageCount(id: Long): Int = repo.usageCount(id)

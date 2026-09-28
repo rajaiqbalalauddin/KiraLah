@@ -63,9 +63,35 @@ class AppContainer(val application: Application) {
      */
     val selectedMonth = MutableStateFlow(MonthPeriods.current(Dates.zone, MonthStart.value))
 
+    /**
+     * The period that was "this month" the last time we looked. The notification listener keeps this
+     * process alive for days, so without this the tabs stayed on last month after a new one began and
+     * fresh entries (which belong to the new month) seemed to vanish while app balances still moved.
+     */
+    @Volatile
+    private var lastCurrentMonth = selectedMonth.value
+
     init {
         // A new start day reshapes every period, so both tabs jump back to the current one.
-        appScope.launch { MonthStart.day.drop(1).collect { selectedMonth.value = MonthPeriods.current(Dates.zone, it) } }
+        appScope.launch {
+            MonthStart.day.drop(1).collect {
+                val now = MonthPeriods.current(Dates.zone, it)
+                lastCurrentMonth = now
+                selectedMonth.value = now
+            }
+        }
+    }
+
+    /**
+     * Called whenever the app comes to the front. If a new month has started since we last looked and
+     * the user was on the current month, both tabs move to the new one. A past month the user picked
+     * on purpose is left alone.
+     */
+    fun rollToCurrentMonth() {
+        val now = MonthPeriods.current(Dates.zone, MonthStart.value)
+        if (now == lastCurrentMonth) return
+        if (selectedMonth.value == lastCurrentMonth) selectedMonth.value = now
+        lastCurrentMonth = now
     }
 }
 

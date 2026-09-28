@@ -12,8 +12,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * WAL journaling lets the listener write while the UI reads without blocking each other.
  */
 @Database(
-    entities = [TransactionEntity::class, WatchedAppEntity::class, PendingEntity::class, PaymentQrEntity::class, RawNotificationEntity::class, SplitBillEntity::class, FriendEntity::class, CustomCategoryEntity::class, SpendingLimitEntity::class],
-    version = 8,
+    entities = [TransactionEntity::class, WatchedAppEntity::class, PendingEntity::class, PaymentQrEntity::class, RawNotificationEntity::class, SplitBillEntity::class, FriendEntity::class, CustomCategoryEntity::class, SpendingLimitEntity::class, CategoryRuleEntity::class],
+    version = 9,
     exportSchema = false,
 )
 abstract class BuylessDatabase : RoomDatabase() {
@@ -26,12 +26,13 @@ abstract class BuylessDatabase : RoomDatabase() {
     abstract fun friendDao(): FriendDao
     abstract fun customCategoryDao(): CustomCategoryDao
     abstract fun spendingLimitDao(): SpendingLimitDao
+    abstract fun categoryRuleDao(): CategoryRuleDao
 
     companion object {
         fun build(context: Context): BuylessDatabase =
             Room.databaseBuilder(context, BuylessDatabase::class.java, "buyless.db")
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .build()
 
         /** v2 adds saved payment QRs for bill splitting. Existing transactions are untouched. */
@@ -115,6 +116,33 @@ abstract class BuylessDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE UNIQUE INDEX IF NOT EXISTS `index_spending_limits_categoryKey_period` " +
                         "ON `spending_limits` (`categoryKey`, `period`)",
+                )
+            }
+        }
+
+        /**
+         * v9 adds remembered categories per merchant, and records the other app on transfers between
+         * your own apps. Transfers already paired get their other app filled in from their partner.
+         */
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `counterpartPackage` TEXT")
+                db.execSQL("ALTER TABLE `transactions` ADD COLUMN `counterpartLabel` TEXT")
+                db.execSQL(
+                    "UPDATE `transactions` SET " +
+                        "`counterpartPackage` = (SELECT p.`sourcePackage` FROM `transactions` p WHERE p.`id` = `transactions`.`linkedId`), " +
+                        "`counterpartLabel` = (SELECT p.`sourceLabel` FROM `transactions` p WHERE p.`id` = `transactions`.`linkedId`) " +
+                        "WHERE `linkedId` IS NOT NULL",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `category_rules` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `merchantKey` TEXT NOT NULL, " +
+                        "`merchant` TEXT NOT NULL, `direction` TEXT NOT NULL, `category` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_category_rules_merchantKey_direction` " +
+                        "ON `category_rules` (`merchantKey`, `direction`)",
                 )
             }
         }

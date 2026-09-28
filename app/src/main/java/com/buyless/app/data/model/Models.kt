@@ -29,8 +29,19 @@ object CategoryKeys {
 /** Rough type of a watched app, only used to pick a fallback icon when the real one is unavailable. */
 enum class AppKind { BANK, WALLET }
 
-/** Where a transaction came from, so auto-recorded rows can be told apart from ones the user typed. */
-enum class Origin { AUTO, REVIEWED, MANUAL }
+/**
+ * Where a transaction came from, so auto-recorded rows can be told apart from ones the user typed.
+ * MIRROR is the other half of a transfer between your own apps that KiraLah added because that app
+ * sent no notification (yet). If the app's own alert arrives later, it replaces the mirror.
+ */
+enum class Origin { AUTO, REVIEWED, MANUAL, MIRROR }
+
+/** Turns a merchant name into the key remembered categories are stored under. */
+object CategoryRules {
+    /** "  GRAB  Holdings " and "grab holdings" are the same merchant. Blank names get no rule. */
+    fun key(merchant: String): String? =
+        merchant.trim().lowercase().replace(Regex("\\s+"), " ").takeIf { it.isNotEmpty() }
+}
 
 /** Lifecycle of a notification waiting in Quick check. Resolved rows are kept for de-duplication. */
 enum class PendingStatus { OPEN, SAVED, IGNORED }
@@ -53,6 +64,9 @@ data class TransactionDraft(
     val timestamp: Long,
     val isInternal: Boolean = false,
     val rawText: String? = null,
+    /** The other app of a transfer between your own apps (to, for money out; from, for money in). */
+    val counterpartPackage: String? = null,
+    val counterpartLabel: String? = null,
 )
 
 /** Package name used for transactions typed in by hand that did not come from any app. */

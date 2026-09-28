@@ -61,6 +61,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -187,7 +188,7 @@ fun EditorScreen(onClose: () -> Unit) {
                 Label(if (vm.direction == Direction.IN) "From" else "Merchant or person")
                 OutlinedTextField(
                     value = vm.merchant,
-                    onValueChange = { vm.merchant = it.take(60) },
+                    onValueChange = { vm.onMerchantChange(it.take(60)) },
                     placeholder = { Text("Who was it?") },
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),
@@ -203,7 +204,7 @@ fun EditorScreen(onClose: () -> Unit) {
                             CategoryPill(
                                 label = s.label,
                                 selected = vm.category == option.key,
-                                onClick = { vm.category = option.key },
+                                onClick = { vm.pickCategory(option.key) },
                                 // Only your own categories can be changed; built-ins stay fixed.
                                 onLongClick = option.customId?.let { id -> { editingCategory = id } },
                             ) {
@@ -217,13 +218,27 @@ fun EditorScreen(onClose: () -> Unit) {
                     if (catalog.custom.isNotEmpty()) {
                         Text("Hold one of your categories to edit it.", style = MaterialTheme.typography.bodySmall, color = BColors.Muted)
                     }
+
+                    // Whether this choice is a one-off or should stick for this merchant from now on.
+                    Label("Use this category for")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ScopeButton("This entry only", !vm.rememberForMerchant, Modifier.weight(1f)) { vm.rememberForMerchant = false }
+                        ScopeButton("Every “${vm.merchantForRule()}” entry", vm.rememberForMerchant, Modifier.weight(1f)) { vm.rememberForMerchant = true }
+                    }
+                    if (vm.rememberForMerchant) {
+                        Text(
+                            "New entries from ${vm.merchantForRule()} will be filed here automatically. Past entries stay as they are.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = BColors.Muted,
+                        )
+                    }
                 }
 
                 if (vm.mode != EditorMode.REVIEW) {
                     Label("Paid with")
                     ChipFlow {
                         sources.forEach { src ->
-                            SelectPill(src.label, selected = vm.sourcePackage == src.packageName, onClick = { vm.sourcePackage = src.packageName }) {
+                            SelectPill(src.label, selected = vm.sourcePackage == src.packageName, onClick = { vm.selectSource(src.packageName) }) {
                                 if (src.kind != null) {
                                     AppBadge(src.packageName, src.kind, size = 20.dp)
                                 } else {
@@ -254,7 +269,7 @@ fun EditorScreen(onClose: () -> Unit) {
                     Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 48.dp)
-                        .toggleable(value = vm.isInternal, role = Role.Checkbox, onValueChange = { vm.isInternal = it }),
+                        .toggleable(value = vm.isInternal, role = Role.Checkbox, onValueChange = vm::setTransfer),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(checked = vm.isInternal, onCheckedChange = null, colors = CheckboxDefaults.colors(checkedColor = BColors.Violet))
@@ -263,6 +278,30 @@ fun EditorScreen(onClose: () -> Unit) {
                         Text("Transfer between my own apps", style = MaterialTheme.typography.titleMedium)
                         Text("Not counted in spending or income", style = MaterialTheme.typography.bodySmall, color = BColors.Muted)
                     }
+                }
+
+                // The other side of the transfer. Required, so every transfer can say "BIMB → TNG".
+                if (vm.isInternal) {
+                    Label(if (vm.direction == Direction.OUT) "Went to" else "Came from")
+                    ChipFlow {
+                        sources.filter { it.packageName != vm.sourcePackage }.forEach { src ->
+                            SelectPill(src.label, selected = vm.counterpartPackage == src.packageName, onClick = { vm.selectCounterpart(src.packageName) }) {
+                                if (src.kind != null) {
+                                    AppBadge(src.packageName, src.kind, size = 20.dp)
+                                } else {
+                                    Icon(Icons.Rounded.AccountBalanceWallet, contentDescription = null, tint = BColors.Muted, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                    vm.counterpartError?.let { msg ->
+                        Text(msg, style = MaterialTheme.typography.bodySmall, color = BColors.Danger)
+                    }
+                    Text(
+                        "If that app sends no alert of its own, KiraLah adds the matching entry there so its balance stays right.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BColors.Muted,
+                    )
                 }
             }
         }
@@ -306,7 +345,7 @@ fun EditorScreen(onClose: () -> Unit) {
     CategoryEditing(
         editingCategory,
         onDone = { editingCategory = null },
-        onCreated = { key -> vm.category = key },
+        onCreated = { key -> vm.pickCategory(key) },
         onDeleted = { key -> if (vm.category == key) vm.setDirectionAndFixCategory(vm.direction, resetTo = true) },
     )
 
@@ -380,6 +419,24 @@ private fun DirectionButton(label: String, icon: ImageVector, selected: Boolean,
         Icon(icon, contentDescription = null, tint = if (selected) BColors.Surface else BColors.Ink, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(6.dp))
         Text(label, style = MaterialTheme.typography.titleSmall, color = if (selected) BColors.Surface else BColors.Ink)
+    }
+}
+
+/** One half of the "This entry only / Every <merchant> entry" choice under the category chips. */
+@Composable
+private fun ScopeButton(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Row(
+        modifier
+            .defaultMinSize(minHeight = 44.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (selected) BColors.Lavender else BColors.Surface)
+            .border(2.dp, if (selected) BColors.Violet else BColors.Border, RoundedCornerShape(14.dp))
+            .toggleable(value = selected, role = Role.RadioButton, onValueChange = { onClick() })
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 

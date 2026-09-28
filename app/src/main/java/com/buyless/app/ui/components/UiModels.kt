@@ -41,10 +41,19 @@ data class AppTileUi(
 fun TransactionEntity.toUi(today: LocalDate): TxnUi {
     val incoming = direction == Direction.IN.name
     val date = Dates.toDate(timestamp)
+    // A transfer between your own apps reads as the route the money took, e.g. "BIMB → TNG".
+    val other = counterpartLabel
+    val where = if (!isInternal || other == null) {
+        sourceLabel
+    } else if (incoming) {
+        "$other → $sourceLabel"
+    } else {
+        "$sourceLabel → $other"
+    }
     return TxnUi(
         id = id,
         title = merchant.ifBlank { sourceLabel },
-        subtitle = "$sourceLabel · ${Dates.relativeDay(date, today)}, ${Dates.timeOf(timestamp)}",
+        subtitle = "$where · ${Dates.relativeDay(date, today)}, ${Dates.timeOf(timestamp)}",
         amountText = Money.formatSigned(amountSen, incoming),
         tone = when {
             isInternal -> AmountTone.NEUTRAL
